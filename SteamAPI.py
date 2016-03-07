@@ -13,6 +13,10 @@ from Crypto.Cipher import PKCS1_v1_5
 from pyee import EventEmitter
 import SteamID
 
+import logging
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+
 
 def save_cookies(session, filename):
     with open(filename, 'w') as f:
@@ -219,12 +223,12 @@ class SteamAPI:
         if self.chatState == ChatState.LoggingOn or self.chatState == ChatState.LoggedOn:
             return
 
-        print "Requesting chat WebAPI token"
+        logger.info("Requesting chat WebAPI token")
         self.chatState = ChatState.LoggingOn
 
         err, token = self.getWebApiOauthToken()
         if err:
-            print "Cannot get oauth token: ", err
+            logger.error("Cannot get oauth token: %s", err)
             self.chatState = ChatState.LogOnFailed
             timer = Timer(5.0, self.chatLogon)
             timer.daemon = True
@@ -235,7 +239,7 @@ class SteamAPI:
             "https://api.steampowered.com/ISteamWebUserPresenceOAuth/Logon/v1", data={"ui_mode": uiMode, "access_token": token})
 
         if login.status_code != 200:
-            print "Error logging into webchat ({})".format(login.status_code)
+            logger.error("Error logging into webchat (%s)", login.status_code)
             timer = Timer(5.0, self.chatLogon)
             timer.daemon = True
             timer.start()
@@ -244,7 +248,7 @@ class SteamAPI:
         login_data = login.json()
 
         if login_data["error"] != "OK":
-            print "Error logging into webchat: ", login_data["error"]
+            logger.error("Error logging into webchat: %s", login_data["error"])
             timer = Timer(5.0, self.chatLogon)
             timer.daemon = True
             timer.start()
@@ -294,7 +298,7 @@ class SteamAPI:
         })
 
         if logoff.status_code != 200:
-            print "Error logging off of chat: ", logoff.status_code
+            logger.error("Error logging off of chat: %s", logoff.status_code)
             timer = Timer(1.0, self.chatLogoff)
             timer.daemon = True
             timer.start()
@@ -327,7 +331,7 @@ class SteamAPI:
         self._chat["timer"].start()
 
         if response.status_code != 200:
-            print "Error in chat poll: ", response.status_code
+            logger.error("Error in chat poll: %s", response.status_code)
             response.raise_for_status()
             return None
 
@@ -349,11 +353,11 @@ class SteamAPI:
             if type_ == "personastate":
                 self._chatUpdatePersona(sender)
             elif type_ == "saytext":
-                self.event.emit('chatMessage', sender, message["text"])
+                self.event.emit('chatMessage', str(sender), message["text"])
             elif type_ == "typing":
                 self.event.emit('chatTyping', sender)
             else:
-                print "Unhandled message type: ", type_
+                logger.warning("Unhandled message type: %s", type_)
 
     def Exit(self):
         sys.exit()
@@ -377,7 +381,7 @@ class SteamAPI:
             "https://api.steampowered.com/ISteamUserOAuth/GetFriendList/v0001", params=form, headers=self._mobileHeaders)
 
         if response.status_code != 200:
-            print "Load friends error: ", response.status_code
+            logger.error("Load friends error: %s", response.status_code)
             timer = Timer(2.0, self._loadFriends)
             timer.daemon = True
             timer.start()
@@ -395,7 +399,7 @@ class SteamAPI:
             "https://steamcommunity.com/chat/friendstate/" + str(accnum))
 
         if response.status_code != 200:
-            print "Chat update persona error: ", response.status_code
+            logger.error("Chat update persona error: %s", response.status_code)
             timer = Timer(2.0, self._chatUpdatePersona, (steamID))
             timer.daemon = True
             timer.start()
@@ -405,6 +409,7 @@ class SteamAPI:
 
         if str(steamID) in self.chatFriends:
             old_persona = self.chatFriends[str(steamID)]
+            steamID = old_persona["steamID"]
         else:
             old_persona = {}
 

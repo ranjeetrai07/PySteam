@@ -4,13 +4,13 @@ steam = SteamAPI.SteamAPI()
 
 @steam.event.on('chatPersonaState')
 def chatPersonaState(steamID, persona, old_persona, difference):
-    # pass
-    print difference
+    if difference:
+        print difference
 
 
 @steam.event.on('chatMessage')
 def chatMessage(sender, text):
-    print sender, text
+    print steam.chatFriends[sender]["personaName"] + ':', text
     if text.lower() == "ping":
         steam.chatMessage(sender, "pong")
 
