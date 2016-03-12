@@ -155,7 +155,7 @@ class SteamAPI:
         if load_cookies(self._session, jar):
             self.jarLoaded = True
 
-    def login(self, details, cookie_file=None):
+    def login(self, cookie_file=None, **details):
         '''
         Initiates login for Steam Web chat.
         '''
@@ -163,7 +163,7 @@ class SteamAPI:
             self.loadJar(cookie_file)
 
         rsakey = self._session.post("https://steamcommunity.com/login/getrsakey/", data={
-                                    "username": details["accountName"]}, headers=self._mobileHeaders)
+                                    "username": details["username"]}, headers=self._mobileHeaders)
 
         if rsakey.status_code != requests.codes.ok:
             rsakey.raise_for_status()
@@ -183,7 +183,7 @@ class SteamAPI:
             "remember_login": "true",
             "rsatimestamp": rsakey.json()["timestamp"],
             "twofactorcode": details.get('two-factor', ""),
-            "username": details['accountName'],
+            "username": details['username'],
             "oauth_client_id": "DE45CD61",
             "oauth_scope": "read_profile write_profile read_client write_client",
             "loginfriendlyname": "#login_emailauth_friendlyname_mobile"
@@ -224,7 +224,7 @@ class SteamAPI:
         self._cache = details
         return LoginStatus.LoginFailed
 
-    def retry(self, details):
+    def retry(self, **details):
         '''
         Retries a previously failed login attempt.
         Commonly used to submit a SteamGuard or Mobile Authenticator code.

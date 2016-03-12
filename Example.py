@@ -16,19 +16,19 @@ def chatMessage(sender, text):
         steam.chatMessage(sender, "pong")
 
 
-username = raw_input("Username: ")
-password = raw_input("Password: ")
+username = str(raw_input("Username: "))
+password = str(raw_input("Password: "))
 # from sys import argv
 # username = argv[1]
 # password = argv[2]
 
-status = steam.login({"accountName": str(username), "password": str(password)})
+status = steam.login(username=username, password=password)
 if status == SteamAPI.LoginStatus.TwoFactor:
     token = raw_input("Two-factor Token: ")
-    status = steam.retry({"two-factor": token})
+    status = steam.retry(twofactor=token)
 elif status == SteamAPI.LoginStatus.SteamGuard:
     steamguard = raw_input("SteamGuard Code: ")
-    status = steam.retry({"steamguard": steamguard})
+    status = steam.retry(steamguard=steamguard)
 
 if status == SteamAPI.LoginStatus.LoginSuccessful:
     steam.chatLogon()
