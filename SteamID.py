@@ -159,6 +159,9 @@ class SteamID:
     def __str__(self):
         return str(self.SteamID64)
 
+    def __repr__(self):
+        return "SteamID.SteamID('{}')".format(self.SteamID64)
+
     def _getTypeFromChar(self, typeChar):
         for type_ in self.TypeChars:
             if self.TypeChars[type_] == typeChar:

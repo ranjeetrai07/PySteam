@@ -3,9 +3,10 @@ steam = SteamAPI.SteamAPI()
 
 
 @steam.event.on('chatPersonaState')
-def chatPersonaState(steamID, persona, old_persona, difference):
-    if difference:
-        print difference
+def chatPersonaState(steamID, persona, old_persona):
+    diff = SteamAPI.dictDiff(persona, old_persona)
+    if diff:
+        print diff
 
 
 @steam.event.on('chatMessage')
@@ -17,6 +18,9 @@ def chatMessage(sender, text):
 
 username = raw_input("Username: ")
 password = raw_input("Password: ")
+# from sys import argv
+# username = argv[1]
+# password = argv[2]
 
 status = steam.login({"accountName": str(username), "password": str(password)})
 if status == SteamAPI.LoginStatus.TwoFactor:

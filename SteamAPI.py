@@ -1,13 +1,14 @@
-import requests
 import base64
 import math
 import random
 import json
 import re
+from enum import IntEnum, unique
 from threading import Timer
 import pickle
 import os
 import sys
+import requests
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from pyee import EventEmitter
@@ -19,12 +20,18 @@ logger = logging.getLogger(__name__)
 
 
 def save_cookies(session, filename):
+    '''
+    Dumps cookies to a file
+    '''
     with open(filename, 'w') as f:
         f.truncate()
         pickle.dump(session.cookies._cookies, f)
 
 
 def load_cookies(session, filename):
+    '''
+    Loads cookies from a previous cookie dump
+    '''
     if not os.path.isfile(filename):
         return False
 
@@ -41,19 +48,41 @@ def load_cookies(session, filename):
 
 
 def generateSessionID():
+    '''
+    Generates a "random" session ID for Steam
+    '''
     return int(math.floor(random.random() * 1000000000))
 
 
-class LoginStatus:
+def dictDiff(a, b):
+    '''
+    Returns the changes between two dicts
+    '''
+    diff = {}
+
+    for key in a.keys():
+        if key in b:
+            if b[key] != a[key]:
+                diff[key] = a[key]
+        else:
+            diff[key] = a[key]
+
+    return diff
+
+
+@unique
+class LoginStatus(IntEnum):
     Waiting, LoginFailed, LoginSuccessful, SteamGuard, TwoFactor, Captcha = range(
         6)
 
 
-class ChatState:
+@unique
+class ChatState(IntEnum):
     Offline, LoggingOn, LogOnFailed, LoggedOn = range(4)
 
 
-class UserStatus:
+@unique
+class PersonaState(IntEnum):
     Offline = 0
     Online = 1
     Busy = 2
@@ -64,7 +93,9 @@ class UserStatus:
     Max = 7
 
 
-class PersonaStateFlag:
+@unique
+class PersonaStateFlag(IntEnum):
+    Unknown = 0
     HasRichPresence = 1
     InJoinableGame = 2
 
@@ -74,6 +105,10 @@ class PersonaStateFlag:
 
 
 class SteamAPI:
+    '''
+    Provides a Python interface to the Steam Web API, for chat
+    '''
+
     def __init__(self):
         self.oauth_client_id = "DE45CD61"
         self._session = requests.Session()
@@ -101,6 +136,9 @@ class SteamAPI:
         }
 
     def _checkHttpError(self, response):
+        '''
+        Checks for Steam's definition of an error
+        '''
         if response.status_code >= 300 and response.status_code <= 399 and "/login" in response.headers["location"]:
             return True
 
@@ -111,10 +149,16 @@ class SteamAPI:
         return False
 
     def loadJar(self, jar):
+        '''
+        Loads cookies from a saved cookie jar
+        '''
         if load_cookies(self._session, jar):
             self.jarLoaded = True
 
     def login(self, details, cookie_file=None):
+        '''
+        Initiates login for Steam Web chat.
+        '''
         if cookie_file:
             self.loadJar(cookie_file)
 
@@ -181,11 +225,18 @@ class SteamAPI:
         return LoginStatus.LoginFailed
 
     def retry(self, details):
+        '''
+        Retries a previously failed login attempt.
+        Commonly used to submit a SteamGuard or Mobile Authenticator code.
+        '''
         deets = self._cache.copy()
         deets.update(details)
         return self.login(deets)
 
     def getWebApiOauthToken(self):
+        '''
+        Retrives necessary OAuth token for Steam Web chat
+        '''
         resp = self._session.get("https://steamcommunity.com/chat")
         if self._checkHttpError(resp):
             return ("HTTP Error", None)
@@ -199,16 +250,21 @@ class SteamAPI:
         return ("Malformed Response", None)
 
     def _initialLoadFriends(self, resp):
+        '''
+        Parses the chat page for the initial friends state
+        '''
         friends_json = re.compile(ur', (\[.*\]), ')
         matches = friends_json.search(resp)
+
         if matches:
-            res = json.loads(matches.groups()[0])
+            res = json.loads(
+                matches.groups()[0])
             for friend in res:
                 persona = {
                     "steamID": SteamID.SteamID(friend['m_ulSteamID']),
                     "personaName": friend['m_strName'],
-                    "personaState": friend['m_ePersonaState'],
-                    "personaStateFlags": friend.get('m_nPersonaStateFlags', 0),
+                    "personaState": PersonaState(friend['m_ePersonaState']),
+                    "personaStateFlags": PersonaStateFlag(friend.get('m_nPersonaStateFlags') or 0),
                     "avatarHash": friend['m_strAvatarHash'],
                     "inGame": friend.get('m_bInGame', False),
                     "inGameAppID": friend.get('m_nInGameAppID', None),
@@ -217,6 +273,9 @@ class SteamAPI:
                 self.chatFriends[str(persona["steamID"])] = persona
 
     def chatLogon(self, interval=500, uiMode="web", cookie_file=None):
+        '''
+        Logs into Web chat
+        '''
         if cookie_file:
             self.loadJar(cookie_file)
 
@@ -261,11 +320,6 @@ class SteamAPI:
             "interval": interval
         }
 
-        # self.friends = self._loadFriends()
-        # ids = [friend["steamid"] for friend in self.friends]
-        # for id_ in ids:
-        #     self._chatUpdatePersona(SteamID.SteamID(id_))
-
         if cookie_file:
             save_cookies(self._session, cookie_file)
 
@@ -273,6 +327,9 @@ class SteamAPI:
         self._chatPoll()
 
     def chatMessage(self, recipient, text, type_="saytext"):
+        '''
+        Sends a message to a specified recipient
+        '''
         if self.chatState != ChatState.LoggedOn:
             raise Exception(
                 "Chat must be logged on before messages can be sent")
@@ -292,6 +349,9 @@ class SteamAPI:
             "https://api.steampowered.com/ISteamWebUserPresenceOAuth/Message/v1", data=form)
 
     def chatLogoff(self):
+        '''
+        Requests a Logoff from Steam
+        '''
         logoff = self._session.post("https://api.steampowered.com/ISteamWebUserPresenceOAuth/Logoff/v1", data={
             "access_token": self._chat["accessToken"],
             "umqid": self._chat["umqid"]
@@ -306,9 +366,11 @@ class SteamAPI:
             self._chat = {}
             self.chatFriends = {}
             self.chatState = ChatState.Offline
-            self.Exit()
 
     def _chatPoll(self):
+        '''
+        Polls the Steam Web chat API for new events
+        '''
         form = {
             "umqid": self._chat["umqid"],
             "message": self._chat["message"],
@@ -337,8 +399,8 @@ class SteamAPI:
 
         body = response.json()
 
-        # if body["error"] != "OK":
-        #     print "Error in chat poll: ", body["error"]
+        if body["error"] != "OK":
+            logger.warning("Error in chat poll: %s", body["error"])
 
         self._chat['message'] = body.get("messagelast", "")
 
@@ -359,19 +421,21 @@ class SteamAPI:
             else:
                 logger.warning("Unhandled message type: %s", type_)
 
-    def Exit(self):
-        sys.exit()
+    def urlForAvatarHash(self, hashed):
+        '''
+        Provides the URL for a steam avatar, given the avatar hash
+        '''
+        if hashed == ("0" * 40):
+            hashed = 'fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb'
 
-    def avatarUrl(self, hashed):
-        tag = hashed[:1]
-        url = "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/{tag}/{hash}_full.jpg".format(
+        tag = hashed[:2]
+        return "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/{tag}/{hash}_full.jpg".format(
             tag=tag, hash=hashed)
 
-        if hashed == ("0" * 40):
-            return "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg"
-        return url
-
-    def _loadFriends(self):
+    def _loadFriendList(self):
+        '''
+        Loads friend data
+        '''
         form = {
             "access_token": self.oAuthToken,
             "steamid": self.steamID
@@ -382,7 +446,7 @@ class SteamAPI:
 
         if response.status_code != 200:
             logger.error("Load friends error: %s", response.status_code)
-            timer = Timer(2.0, self._loadFriends)
+            timer = Timer(2.0, self._loadFriendList)
             timer.daemon = True
             timer.start()
             return None
@@ -394,6 +458,9 @@ class SteamAPI:
         return None
 
     def _chatUpdatePersona(self, steamID):
+        '''
+        Retrives new persona data if persona event received
+        '''
         accnum = steamID.accountid
         response = self._session.get(
             "https://steamcommunity.com/chat/friendstate/" + str(accnum))
@@ -405,34 +472,25 @@ class SteamAPI:
             timer.start()
             return None
 
-        body = response.json()
-
         if str(steamID) in self.chatFriends:
             old_persona = self.chatFriends[str(steamID)]
             steamID = old_persona["steamID"]
         else:
             old_persona = {}
 
+        body = response.json()
+
         persona = {
             "steamID": steamID,
             "personaName": body['m_strName'],
-            "personaState": body['m_ePersonaState'],
-            "personaStateFlags": body.get('m_nPersonaStateFlags', 0),
+            "personaState": PersonaState(body['m_ePersonaState']),
+            "personaStateFlags": PersonaStateFlag(body.get('m_nPersonaStateFlags') or 0),
             "avatarHash": body['m_strAvatarHash'],
             "inGame": body.get('m_bInGame', False),
             "inGameAppID": body.get('m_nInGameAppID', None),
             "inGameName": body.get('m_strInGameName', None)
         }
 
-        diff = {}
-
-        for key in persona.keys():
-            if key in old_persona:
-                if old_persona[key] != persona[key]:
-                    diff[key] = persona[key]
-            else:
-                diff[key] = persona[key]
-
         self.event.emit(
-            'chatPersonaState', steamID, persona, old_persona, diff)
+            'chatPersonaState', steamID, persona, old_persona)
         self.chatFriends[str(steamID)] = persona

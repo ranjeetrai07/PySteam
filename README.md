@@ -7,4 +7,4 @@ Includes a port of [node-steamid](https://github.com/DoctorMcKay/node-steamid) a
 
 ## Packages
 
-`pip install requests pycrypto pyee`
+`pip install requests pycrypto pyee enum34`
