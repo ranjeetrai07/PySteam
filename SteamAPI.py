@@ -95,13 +95,25 @@ class PersonaState(IntEnum):
 
 @unique
 class PersonaStateFlag(IntEnum):
-    Unknown = 0
+    Default = 0
     HasRichPresence = 1
     InJoinableGame = 2
 
     OnlineUsingWeb = 256
     OnlineUsingMobile = 512
     OnlineUsingBigPicture = 1024
+
+
+def urlForAvatarHash(self, hashed):
+    '''
+    Provides the URL for a steam avatar, given the avatar hash
+    '''
+    if hashed == ("0" * 40):
+        hashed = 'fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb'
+
+    tag = hashed[:2]
+    return "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/{tag}/{hash}_full.jpg".format(
+        tag=tag, hash=hashed)
 
 
 class SteamAPI:
@@ -405,32 +417,17 @@ class SteamAPI:
         self._chat['message'] = body.get("messagelast", "")
 
         for message in body.get("messages", []):
-            sender = SteamID.SteamID()
-            sender.universe = SteamID.Universe.PUBLIC
-            sender.type = SteamID.Type.INDIVIDUAL
-            sender.instance = SteamID.Instance.DESKTOP
-            sender.accountid = message['accountid_from']
+            sender = SteamID.SteamID(message['accountid_from'])
 
             type_ = message["type"]
             if type_ == "personastate":
                 self._chatUpdatePersona(sender)
             elif type_ == "saytext":
-                self.event.emit('chatMessage', str(sender), message["text"])
+                self.event.emit('chatMessage', sender, message["text"])
             elif type_ == "typing":
                 self.event.emit('chatTyping', sender)
             else:
                 logger.warning("Unhandled message type: %s", type_)
-
-    def urlForAvatarHash(self, hashed):
-        '''
-        Provides the URL for a steam avatar, given the avatar hash
-        '''
-        if hashed == ("0" * 40):
-            hashed = 'fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb'
-
-        tag = hashed[:2]
-        return "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/{tag}/{hash}_full.jpg".format(
-            tag=tag, hash=hashed)
 
     def _loadFriendList(self):
         '''
