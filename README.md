@@ -16,8 +16,10 @@ Includes a port of [node-steamid](https://github.com/DoctorMcKay/node-steamid) a
 
 `import` the Steam API
 
-    import SteamAPI
-    steam = SteamAPI.SteamAPI()
+```python
+import SteamAPI
+steam = SteamAPI.SteamAPI()
+```
 
 Define the events you need to respond to with the `pyee` event decorators.
 
@@ -35,31 +37,33 @@ The current events emitted are:
 
 Which can be invoked like so:
 
-    @steam.event.on('chatPersonaState')
-    def chatPersonaStateHandler(steamID, nextPersona, prevPersona):
-        pass
+```python
+@steam.event.on('chatPersonaState')
+def chatPersonaStateHandler(steamID, nextPersona, prevPersona):
+    pass
 
-    @steam.event.on('chatMessage')
-    def chatMessageHandler(steamID, text):
-        print steam.chatFriends[steamID]["personaName"] + ':', text
-        if text.lower() == "ping":
-            steam.chatMessage(sender, "pong")
+@steam.event.on('chatMessage')
+def chatMessageHandler(steamID, text):
+    print steam.chatFriends[steamID]["personaName"] + ':', text
+    if text.lower() == "ping":
+        steam.chatMessage(sender, "pong")
 
-    @steam.event.on('chatTyping')
-    def chatTypingHandler(steamID):
-        pass
-
+@steam.event.on('chatTyping')
+def chatTypingHandler(steamID):
+    pass
+```
 
 Logging in can be achieved through this code snippet:
 
-    status = steam.login(username=username, password=password)
-    if status == SteamAPI.LoginStatus.TwoFactor:
-        token = raw_input("Two-factor Token: ")
-        status = steam.retry(twofactor=token)
-    elif status == SteamAPI.LoginStatus.SteamGuard:
-        steamguard = raw_input("SteamGuard Code: ")
-        status = steam.retry(steamguard=steamguard)
-
+```python
+status = steam.login(username=username, password=password)
+if status == SteamAPI.LoginStatus.TwoFactor:
+    token = raw_input("Two-factor Token: ")
+    status = steam.retry(twofactor=token)
+elif status == SteamAPI.LoginStatus.SteamGuard:
+    steamguard = raw_input("SteamGuard Code: ")
+    status = steam.retry(steamguard=steamguard)
+```
 
 Status will be `SteamAPI.LoginStatus.LoginSuccessful` once you have logged in.  
 From here, you can call `steam.chatLogon()` to initiate a connection with the chat API.
@@ -104,16 +108,18 @@ Rendered Forms:
 
 A **persona** is a dictionary of user info, usually like so:
 
-    {
-        'avatarHash': '848eaefc30b56c57c03d4c0d7e4e796a138fdccc',
-        'inGame': True,
-        'inGameAppID': '240',
-        'inGameName': 'Counter-Strike: Source',
-        'personaName': 'anzu',
-        'personaState': <PersonaState.Away: 3>,
-        'personaStateFlags': <PersonaStateFlag.Default: 0>,
-        'steamID': SteamID.SteamID('76561198029444182')
-    }
+```python
+{
+    'avatarHash': '848eaefc30b56c57c03d4c0d7e4e796a138fdccc',
+    'inGame': True,
+    'inGameAppID': '240',
+    'inGameName': 'Counter-Strike: Source',
+    'personaName': 'anzu',
+    'personaState': <PersonaState.Away: 3>,
+    'personaStateFlags': <PersonaStateFlag.Default: 0>,
+    'steamID': SteamID.SteamID('76561198029444182')
+}
+```
 
 * `avatarHash` is the hash of the user's Steam avatar.
     * Use `SteamAPI.urlForAvatarHash(avatarHash)` to get the full URL.
