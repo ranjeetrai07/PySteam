@@ -148,6 +148,6 @@ A **persona** is a dictionary of user info, usually like so:
 
 Messages can be sent via the `steam.chatMessage` method.
 
-```
+```python
 steam.chatMessage(SteamID64, message)
-```
+``` 
