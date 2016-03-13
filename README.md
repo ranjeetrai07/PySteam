@@ -2,7 +2,7 @@
 
 Python interface for Steam Web Chat.
 
-Ported from [node-steamcommunity](https://github.com/DoctorMcKay/node-steamcommunity).
+Ported from [node-steamcommunity](https://github.com/DoctorMcKay/node-steamcommunity).  
 Includes a port of [node-steamid](https://github.com/DoctorMcKay/node-steamid) as well.
 
 ## Packages Required
@@ -61,12 +61,12 @@ Logging in can be achieved through this code snippet:
         status = steam.retry(steamguard=steamguard)
 
 
-Status will be `SteamAPI.LoginStatus.LoginSuccessful` once you have logged in.
+Status will be `SteamAPI.LoginStatus.LoginSuccessful` once you have logged in.  
 From here, you can call `steam.chatLogon()` to initiate a connection with the chat API.
 
 After you have logged in, `steam.chatFriends` will be populated with the [persona](#persona-data) of the users on your friends list, as a dict with their `SteamID64` as the key.
 
-Nothing will be needed past this in terms of Steam connection.
+Nothing will be needed past this in terms of Steam connection.  
 Once you have finished doing what you're doing, call `steam.chatLogoff()` to gracefully disconnect from the Steam servers.
 
 
