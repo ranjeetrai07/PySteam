@@ -12,7 +12,6 @@ from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from pyee import EventEmitter
 import SteamID
-from pprint import pprint
 
 import logging
 logging.basicConfig()
@@ -240,7 +239,6 @@ class SteamAPI(object):
             self.oAuthToken = oAuth["oauth_token"]
 
             self._cache = {}
-            pprint(self._session.cookies.get_dict())
             self.steamguard = self.steamID + "||" + \
                 self._session.cookies.get(
                     "steamMachineAuth" + self.steamID, '')
