@@ -7,12 +7,12 @@ from enum import IntEnum, unique
 from threading import Timer
 import pickle
 import os
-import sys
 import requests
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from pyee import EventEmitter
 import SteamID
+from pprint import pprint
 
 import logging
 logging.basicConfig()
@@ -104,19 +104,24 @@ class PersonaStateFlag(IntEnum):
     OnlineUsingBigPicture = 1024
 
 
-def urlForAvatarHash(self, hashed):
+def urlForAvatarHash(hashed, quality="full"):
     '''
     Provides the URL for a steam avatar, given the avatar hash
     '''
+    if quality == "icon":
+        quality = ""
+    else:
+        quality = '_' + quality
+
     if hashed == ("0" * 40):
         hashed = 'fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb'
 
     tag = hashed[:2]
-    return "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/{tag}/{hash}_full.jpg".format(
-        tag=tag, hash=hashed)
+    return "http://cdn.akamai.steamstatic.com/steamcommunity/public/images/avatars/{tag}/{hash}{quality}.jpg".format(
+        tag=tag, hash=hashed, quality=quality)
 
 
-class SteamAPI:
+class SteamAPI(object):
     '''
     Provides a Python interface to the Steam Web API, for chat
     '''
@@ -146,6 +151,14 @@ class SteamAPI:
             "user-agent": "Mozilla/5.0 (Linux; U; Android 4.1.1; en-us; Google Nexus 4 - 4.1.1 - API 16 - 768x1280 Build/JRO03S) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
             "accept": "text/javascript, text/html, application/xml, text/xml, */*"
         }
+
+    def emit(self, event, *data):
+        self.event.emit(event, *data)
+
+    def timer(self, interval, func, args=()):
+        timer = Timer(interval, func, args)
+        timer.daemon = True
+        timer.start()
 
     def _checkHttpError(self, response):
         '''
@@ -181,8 +194,10 @@ class SteamAPI:
             rsakey.raise_for_status()
             return None, None
 
-        mod = long(rsakey.json()["publickey_mod"], 16)
-        exp = long(rsakey.json()["publickey_exp"], 16)
+        rsakey = rsakey.json()
+
+        mod = long(rsakey["publickey_mod"], 16)
+        exp = long(rsakey["publickey_exp"], 16)
         rsa_key = RSA.construct((mod, exp))
         rsa = PKCS1_v1_5.PKCS115_Cipher(rsa_key)
 
@@ -193,8 +208,8 @@ class SteamAPI:
             "emailsteamid": "",
             "password": base64.b64encode(rsa.encrypt(details["password"])),
             "remember_login": "true",
-            "rsatimestamp": rsakey.json()["timestamp"],
-            "twofactorcode": details.get('two-factor', ""),
+            "rsatimestamp": rsakey["timestamp"],
+            "twofactorcode": details.get('twofactor', ""),
             "username": details['username'],
             "oauth_client_id": "DE45CD61",
             "oauth_scope": "read_profile write_profile read_client write_client",
@@ -204,16 +219,14 @@ class SteamAPI:
         dologin = self._session.post(
             "https://steamcommunity.com/login/dologin/", data=form, headers=self._mobileHeaders).json()
 
+        self._cache = details
         if not dologin["success"] and dologin.get("emailauth_needed"):
-            self._cache = details
             return LoginStatus.SteamGuard
         elif not dologin["success"] and dologin.get("requires_twofactor"):
-            self._cache = details
             return LoginStatus.TwoFactor
         elif not dologin["success"] and dologin.get("captcha_needed"):
-            self._cache = details
-            print "Captcha URL: https://steamcommunity.com/public/captcha.php?gid=", dologin["captcha_gid"]
-
+            print "Captcha URL: https://steamcommunity.com/public/captcha.php?gid=" + dologin["captcha_gid"]
+            self._captchaGid = dologin["captcha_gid"]
             return LoginStatus.Captcha
         elif not dologin["success"]:
             raise Exception(dologin.get("message", "Unknown error"))
@@ -221,16 +234,20 @@ class SteamAPI:
             sessionID = generateSessionID()
             oAuth = json.loads(dologin["oauth"])
             self._session.cookies.set("sessionid", str(sessionID))
+            self.sessionID = str(sessionID)
 
             self.steamID = oAuth["steamid"]
             self.oAuthToken = oAuth["oauth_token"]
 
             self._cache = {}
-            steamguard = self._session.cookies.get(
-                "steamMachineAuth" + self.steamID, '')
+            pprint(self._session.cookies.get_dict())
+            self.steamguard = self.steamID + "||" + \
+                self._session.cookies.get(
+                    "steamMachineAuth" + self.steamID, '')
 
             if cookie_file:
                 save_cookies(self._session, cookie_file)
+
             return LoginStatus.LoginSuccessful
 
         self._cache = details
@@ -243,7 +260,36 @@ class SteamAPI:
         '''
         deets = self._cache.copy()
         deets.update(details)
-        return self.login(deets)
+        return self.login(**deets)
+
+    def oAuthLogin(self, steamguard, token):
+        '''
+        Allows password-less login via the following attributes set by SteamAPI.login:
+            Instance.steamguard
+            Instance.oAuthToken
+        '''
+        steamguard = steamguard.split('||')
+        steamID = SteamID.SteamID(steamguard[0])
+
+        form = {"access_token": token}
+        login = self._session.post(
+            "https://api.steampowered.com/IMobileAuthService/GetWGToken/v1/", data=form)
+
+        resp = login.json().get('response', {})
+        if not login or 'token' not in resp or 'token_secure' not in resp:
+            logger.error("Error logging in with OAuth: Malformed response")
+            return LoginStatus.LoginFailed
+
+        sid = str(steamID.SteamID64)
+        self._session.cookies.set('steamLogin', sid + '||' + resp['token'])
+        self._session.cookies.set(
+            'steamLoginSecure', sid + '||' + resp['token_secure'])
+        if steamguard[1]:
+            self._session.cookies.set('steamMachineAuth' + sid, steamguard[1])
+        self._session.cookies.set(
+            'sessionid', self._session.cookies.get('sessionid', generateSessionID()))
+
+        return LoginStatus.LoginSuccessful
 
     def getWebApiOauthToken(self):
         '''
@@ -283,6 +329,7 @@ class SteamAPI:
                     "inGameName": friend.get('m_strInGameName', None)
                 }
                 self.chatFriends[str(persona["steamID"])] = persona
+                self.emit('initial', self.chatFriends)
 
     def chatLogon(self, interval=500, uiMode="web", cookie_file=None):
         '''
@@ -301,9 +348,7 @@ class SteamAPI:
         if err:
             logger.error("Cannot get oauth token: %s", err)
             self.chatState = ChatState.LogOnFailed
-            timer = Timer(5.0, self.chatLogon)
-            timer.daemon = True
-            timer.start()
+            self.timer(5.0, self.chatLogon)
             return None
 
         login = self._session.post(
@@ -311,18 +356,14 @@ class SteamAPI:
 
         if login.status_code != 200:
             logger.error("Error logging into webchat (%s)", login.status_code)
-            timer = Timer(5.0, self.chatLogon)
-            timer.daemon = True
-            timer.start()
+            self.timer(5.0, self.chatLogon)
             return None
 
         login_data = login.json()
 
         if login_data["error"] != "OK":
             logger.error("Error logging into webchat: %s", login_data["error"])
-            timer = Timer(5.0, self.chatLogon)
-            timer.daemon = True
-            timer.start()
+            self.timer(5.0, self.chatLogon)
             return None
 
         self._chat = {
@@ -371,9 +412,7 @@ class SteamAPI:
 
         if logoff.status_code != 200:
             logger.error("Error logging off of chat: %s", logoff.status_code)
-            timer = Timer(1.0, self.chatLogoff)
-            timer.daemon = True
-            timer.start()
+            self.timer(1.0, self.chatLogoff)
         else:
             self._chat = {}
             self.chatFriends = {}
@@ -399,10 +438,7 @@ class SteamAPI:
         if self.chatState == ChatState.Offline:
             return None
 
-        self._chat["timer"] = Timer(
-            self._chat['interval'] / 1000.0, self._chatPoll, ())
-        self._chat["timer"].daemon = True
-        self._chat["timer"].start()
+        self.timer(self._chat['interval'] / 1000.0, self._chatPoll)
 
         if response.status_code != 200:
             logger.error("Error in chat poll: %s", response.status_code)
@@ -423,9 +459,9 @@ class SteamAPI:
             if type_ == "personastate":
                 self._chatUpdatePersona(sender)
             elif type_ == "saytext":
-                self.event.emit('chatMessage', sender, message["text"])
+                self.emit('chatMessage', sender, message["text"])
             elif type_ == "typing":
-                self.event.emit('chatTyping', sender)
+                self.emit('chatTyping', sender)
             else:
                 logger.warning("Unhandled message type: %s", type_)
 
@@ -443,9 +479,7 @@ class SteamAPI:
 
         if response.status_code != 200:
             logger.error("Load friends error: %s", response.status_code)
-            timer = Timer(2.0, self._loadFriendList)
-            timer.daemon = True
-            timer.start()
+            self.timer(2.0, self._loadFriendList)
             return None
 
         body = response.json()
@@ -464,9 +498,7 @@ class SteamAPI:
 
         if response.status_code != 200:
             logger.error("Chat update persona error: %s", response.status_code)
-            timer = Timer(2.0, self._chatUpdatePersona, (steamID))
-            timer.daemon = True
-            timer.start()
+            self.timer(2.0, self._chatUpdatePersona, (steamID))
             return None
 
         if str(steamID) in self.chatFriends:
@@ -488,6 +520,6 @@ class SteamAPI:
             "inGameName": body.get('m_strInGameName', None)
         }
 
-        self.event.emit(
+        self.emit(
             'chatPersonaState', steamID, persona, old_persona)
         self.chatFriends[str(steamID)] = persona

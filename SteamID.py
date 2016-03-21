@@ -46,7 +46,7 @@ class ChatInstanceFlags(IntEnum):
     MMSLOBBY = (AccountInstanceMask + 1) >> 3
 
 
-class SteamID:
+class SteamID(object):
     Type = Type
     Universe = Universe
     Instance = Instance
