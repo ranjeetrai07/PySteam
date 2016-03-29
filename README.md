@@ -2,12 +2,12 @@
 
 Python interface for Steam Web Chat.
 
-Ported from [node-steamcommunity](https://github.com/DoctorMcKay/node-steamcommunity).  
+Ported from [node-steamcommunity](https://github.com/DoctorMcKay/node-steamcommunity).
 Includes a port of [node-steamid](https://github.com/DoctorMcKay/node-steamid) as well.
 
 ## Packages Required
 
-    pip install requests pycrypto pyee enum34
+    pip install requests pycrypto pyee enum34 pyquery
 
 `py.test` also needs to be installed for testing, if developing.
 
@@ -17,7 +17,7 @@ Includes a port of [node-steamid](https://github.com/DoctorMcKay/node-steamid) a
 `import` the Steam API
 
 ```python
-import SteamAPI
+import steamapi as SteamAPI
 steam = SteamAPI.SteamAPI()
 ```
 
@@ -57,20 +57,24 @@ Logging in can be achieved through this code snippet:
 
 ```python
 status = steam.login(username=username, password=password)
-if status == SteamAPI.LoginStatus.TwoFactor:
-    token = raw_input("Two-factor Token: ")
-    status = steam.retry(twofactor=token)
-elif status == SteamAPI.LoginStatus.SteamGuard:
-    steamguard = raw_input("SteamGuard Code: ")
-    status = steam.retry(steamguard=steamguard)
+while status != SteamAPI.LoginStatus.LoginSuccessful:
+    if status == SteamAPI.LoginStatus.TwoFactor:
+        token = raw_input("Two-factor Token: ")
+        status = steam.retry(twofactor=token)
+    elif status == SteamAPI.LoginStatus.SteamGuard:
+        steamguard = raw_input("SteamGuard Code: ")
+        status = steam.retry(steamguard=steamguard)
+    elif status == SteamAPI.LoginStatus.Captcha:
+        captcha = raw_input("CAPTCHA: ")
+        status = steam.retry(captcha=captcha)
 ```
 
-Status will be `SteamAPI.LoginStatus.LoginSuccessful` once you have logged in.  
+Status will be `SteamAPI.LoginStatus.LoginSuccessful` once you have logged in.
 From here, you can call `steam.chatLogon()` to initiate a connection with the chat API.
 
 After you have logged in, `steam.chatFriends` will be populated with the [persona](#persona-data) of the users on your friends list, as a dict with their `SteamID64` as the key.
 
-Nothing will be needed past this in terms of Steam connection.  
+Nothing will be needed past this in terms of Steam connection.
 Once you have finished doing what you're doing, call `steam.chatLogoff()` to gracefully disconnect from the Steam servers.
 
 
@@ -97,7 +101,7 @@ And these properties:
 * `sid.instance`
 * `sid.universe`
 
-Rendered Forms:
+Rendered Forms (properties):
 
 * `sid.SteamID64` (e.g. `76561198029444182`)
 * `sid.SteamID32` (e.g. `69178454`)
@@ -150,4 +154,4 @@ Messages can be sent via the `steam.chatMessage` method.
 
 ```python
 steam.chatMessage(SteamID64, message)
-``` 
+```

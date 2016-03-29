@@ -1,13 +1,15 @@
-﻿import steamapi as SteamAPI
+﻿from sys import argv
+import IPython
+
+import steamapi as SteamAPI
 steam = SteamAPI.SteamAPI()
 
 
 @steam.event.on('chatPersonaState')
 def chatPersonaState(steamID, persona, old_persona):
-    # diff = SteamAPI.dictDiff(persona, old_persona)
-    # if diff:
-    #     print diff
-    pass
+    diff = SteamAPI.dictDiff(persona, old_persona)
+    if diff:
+        print diff
 
 
 @steam.event.on('chatMessage')
@@ -19,7 +21,6 @@ def chatMessage(sender, text):
 
 # username = str(raw_input("Username: "))
 # password = str(raw_input("Password: "))
-from sys import argv
 username = argv[1]
 password = argv[2]
 
@@ -36,8 +37,6 @@ while status != SteamAPI.LoginStatus.LoginSuccessful:
         status = steam.retry(captcha=captcha)
 
 
-# steam.chatLogon()
-# raw_input("press enter to exit.")
-import IPython
+steam.chatLogon()
 IPython.embed()
-# steam.chatLogoff()
+steam.chatLogoff()
