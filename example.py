@@ -19,8 +19,6 @@ def chatMessage(sender, text):
         steam.chatMessage(sender, "pong")
 
 
-# username = str(raw_input("Username: "))
-# password = str(raw_input("Password: "))
 username = argv[1]
 password = argv[2]
 
@@ -35,7 +33,6 @@ while status != SteamAPI.LoginStatus.LoginSuccessful:
     elif status == SteamAPI.LoginStatus.Captcha:
         captcha = raw_input("CAPTCHA: ")
         status = steam.retry(captcha=captcha)
-
 
 steam.chatLogon()
 IPython.embed()

@@ -10,7 +10,7 @@ Includes a port of [node-steamid](https://github.com/DoctorMcKay/node-steamid) a
     pip install requests pycrypto pyee enum34 pyquery
 
 `py.test` also needs to be installed for testing, if developing.
-
+`ipython` is used for interactivity in the examples.
 
 ## Usage
 
