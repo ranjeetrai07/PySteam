@@ -203,7 +203,7 @@ def _loadFriendList(self):
     '''
     form = {
         "access_token": self.oAuthToken,
-        "steamid": self.steamID
+        "steamid": str(self.steamID)
     }
 
     response = self.session.get(

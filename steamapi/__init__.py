@@ -43,7 +43,8 @@ class SteamAPI(object):
     from chat import _initialLoadFriends, _chatPoll, _loadFriendList, _chatUpdatePersona
     from chat import chatLogon, chatMessage, chatLogoff
 
-    from profile import setupProfile, editProfile, profileSettings
+    from profile import setupProfile, editProfile, profileSettings, uploadAvatar
+    from market import getMarketApps
 
     def __init__(self):
         self.oauth_client_id = "DE45CD61"
@@ -175,13 +176,13 @@ class SteamAPI(object):
             self.session.cookies.set("sessionid", str(sessionID))
             self.sessionID = str(sessionID)
 
-            self.steamID = oAuth["steamid"]
+            self.steamID = SteamID.SteamID(oAuth["steamid"])
             self.oAuthToken = oAuth["oauth_token"]
 
             self._cache = {}
-            self.steamguard = self.steamID + "||" + \
+            self.steamguard = str(self.steamID) + "||" + \
                 self.session.cookies.get(
-                    "steamMachineAuth" + self.steamID, '')
+                    "steamMachineAuth" + str(self.steamID), '')
 
             if cookie_file:
                 self.save_cookies(cookie_file)
@@ -232,6 +233,14 @@ class SteamAPI(object):
     def parentalUnlock(self, pin):
         unlock = self.session.post(
             CommunityURL('parental', 'ajaxunlock'), data={"pin": pin})
+
+        if not unlock:
+            logger.error("Error unlocking parental with pin: Unknown error")
+            return
+
+        if unlock.status_code != 200:
+            logger.error('HTTP error %s', resp.status_code)
+            return
 
         resp = unlock.json()
         if not resp:
