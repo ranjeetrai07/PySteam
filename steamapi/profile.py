@@ -2,6 +2,7 @@ import SteamID
 from enum import Enum, IntEnum, unique
 from . import *
 from pyquery import PyQuery as pq
+import os
 
 
 class StrEnum(str, Enum):
@@ -25,7 +26,7 @@ class CommentPrivacyState(StrEnum):
 def setupProfile(self):
     ''' Initiates a new Steam Profile '''
     resp = self.session.get(
-        CommunityURL('profiles', self.steamID) + 'edit?welcomed=1')
+        CommunityURL('profiles', str(self.steamID)) + 'edit?welcomed=1')
     return resp and resp.status_code == 200
 
 
@@ -63,7 +64,7 @@ def editProfile(self, new_values=None):
 
         return values
 
-    edit_url = CommunityURL('profiles', self.steamID) + 'edit'
+    edit_url = CommunityURL('profiles', str(self.steamID)) + 'edit'
     doc = pq(self.session.get(edit_url).text)
 
     values = parseForValues(doc)
@@ -118,7 +119,7 @@ def profileSettings(self, new_values=None):
 
         return values
 
-    edit_url = CommunityURL('profiles', self.steamID) + 'edit/settings'
+    edit_url = CommunityURL('profiles', str(self.steamID)) + 'edit/settings'
     doc = pq(self.session.get(edit_url).text)
     values = parseForValues(doc)
 
@@ -141,3 +142,35 @@ def profileSettings(self, new_values=None):
 
         print values
         return (None, editables(values))
+
+
+def uploadAvatar(self, image):
+    '''
+    Sets the current account's avatar on Steam.
+    `image` should be a file-like object, in binary mode.
+    '''
+    data = {
+        'MAX_FILE_SIZE': 1048576,
+        'type': 'player_avatar_image',
+        'sId': self.steamID.SteamID64,
+        'sessionid': self.sessionID,
+        'doSub': 1,
+        'json': 1
+    }
+    files = {'avatar': image}
+    resp = self.session.post(CommunityURL('actions', 'FileUploader'), files=files, data=data)
+
+    if resp.status_code != 200:
+        logger.error('HTTP error %s', resp.status_code)
+        return
+
+    body = resp.json()
+    if not body or not body.get('success'):
+        logger.error('Malformed response')
+        return
+
+    if not body.get('success') and body.get('message'):
+        logger.error(body['message'])
+        return
+
+    return body
