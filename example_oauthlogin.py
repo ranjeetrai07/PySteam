@@ -4,8 +4,12 @@ import IPython
 import steamapi as SteamAPI
 steam = SteamAPI.SteamAPI()
 
-username = argv[1]
-password = argv[2]
+try:
+    username = argv[1]
+    password = argv[2]
+except IndexError:
+    username = raw_input("username: ")
+    password = raw_input("password: ")
 
 status = steam.login(username=username, password=password)
 while status != SteamAPI.LoginStatus.LoginSuccessful:

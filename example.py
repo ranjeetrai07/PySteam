@@ -18,9 +18,12 @@ def chatMessage(sender, text):
     if text.lower() == "ping":
         steam.chatMessage(sender, "pong")
 
-
-username = argv[1]
-password = argv[2]
+try:
+    username = argv[1]
+    password = argv[2]
+except IndexError:
+    username = raw_input("username: ")
+    password = raw_input("password: ")
 
 status = steam.login(username=username, password=password)
 while status != SteamAPI.LoginStatus.LoginSuccessful:
