@@ -202,7 +202,7 @@ def _chatPoll(self):
     self._chat['message'] = body.get("messagelast", "")
 
     for message in body.get("messages", []):
-        sender = SteamID.SteamID(message['accountid_from'])
+        sender = SteamID.SteamID.fromIndividualAccountID(message['accountid_from'])
 
         type_ = message["type"]
         if type_ == "personastate":
