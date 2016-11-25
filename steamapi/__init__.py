@@ -41,7 +41,7 @@ class SteamAPI(object):
     '''
 
     from chat import _initialLoadFriends, _chatPoll, _loadFriendList, _chatUpdatePersona
-    from chat import chatLogon, chatMessage, chatLogoff
+    from chat import chatLogon, chatMessage, chatLogoff, addFriend
 
     from profile import setupProfile, editProfile, profileSettings, uploadAvatar
     from market import getMarketApps

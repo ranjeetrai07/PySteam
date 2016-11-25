@@ -149,6 +149,24 @@ def chatLogoff(self):
         self.chatState = ChatState.Offline
 
 
+def addFriend(self, steamid):
+    form = {
+        "accept_invite": 0,
+        "sessionID": self.sessionID,
+        "steamid": str(SteamID.SteamID(steamid).SteamID64)
+    }
+    response = self.session.post(CommunityURL(
+        'actions', 'AddFriendAjax'), data=form)
+
+    if response.status_code != 200:
+        logger.error("Error in adding friend: %s", response.status_code)
+        response.raise_for_status()
+        return None
+
+    body = response.json()
+    return body["success"]
+
+
 def _chatPoll(self):
     '''
     Polls the Steam Web chat API for new events

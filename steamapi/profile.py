@@ -158,7 +158,8 @@ def uploadAvatar(self, image):
         'json': 1
     }
     files = {'avatar': image}
-    resp = self.session.post(CommunityURL('actions', 'FileUploader'), files=files, data=data)
+    resp = self.session.post(CommunityURL(
+        'actions', 'FileUploader'), files=files, data=data)
 
     if resp.status_code != 200:
         logger.error('HTTP error %s', resp.status_code)
