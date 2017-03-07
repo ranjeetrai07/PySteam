@@ -1,13 +1,14 @@
-﻿import re
+﻿from __future__ import unicode_literals
+import re
 import json
-import SteamID
+# from . import SteamID
 from enum import IntEnum, unique
 from . import *
 
 
 @unique
 class ChatState(IntEnum):
-    Offline, LoggingOn, LogOnFailed, LoggedOn = range(4)
+    Offline, LoggingOn, LogOnFailed, LoggedOn = list(range(4))
 
 
 @unique
@@ -37,7 +38,7 @@ def _initialLoadFriends(self, resp):
     '''
     Parses the chat page for the initial friends state
     '''
-    friends_json = re.compile(ur', (\[.*\]), ')
+    friends_json = re.compile(r', (\[.*\]), ')
     matches = friends_json.search(resp)
 
     if matches:

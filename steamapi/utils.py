@@ -1,5 +1,6 @@
 ﻿from Crypto import Random
 import logging
+import codecs
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(40)
@@ -17,7 +18,7 @@ def generateSessionID():
     '''
     Generates a "random" session ID for Steam
     '''
-    return Random.get_random_bytes(12).encode('hex')
+    return str(codecs.getencoder('hex')(Random.get_random_bytes(12))[0])
 
 
 def urlForAvatarHash(hashed, quality="full"):
@@ -43,7 +44,7 @@ def dictDiff(a, b):
     '''
     diff = {}
 
-    for key in a.keys():
+    for key in list(a.keys()):
         if key in b:
             if b[key] != a[key]:
                 diff[key] = a[key]

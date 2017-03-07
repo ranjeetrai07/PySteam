@@ -1,4 +1,6 @@
-﻿import base64
+﻿from __future__ import unicode_literals
+from builtins import bytes
+import base64
 import json
 import re
 from enum import IntEnum, unique
@@ -9,23 +11,23 @@ import requests
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from pyee import EventEmitter
-import SteamID
+from . import SteamID
 
 # set up logging
-from utils import logger
+from .utils import logger
 
-from utils import CommunityURL, APIUrl, generateSessionID, urlForAvatarHash
-from utils import dictDiff
+from .utils import CommunityURL, APIUrl, generateSessionID, urlForAvatarHash
+from .utils import dictDiff
 
 # enums in other modules
-from chat import ChatState, PersonaState, PersonaStateFlag
-from profile import PrivacyState, CommentPrivacyState
+from .chat import ChatState, PersonaState, PersonaStateFlag
+from .profile import PrivacyState, CommentPrivacyState
 
 
 @unique
 class LoginStatus(IntEnum):
-    Waiting, LoginFailed, LoginSuccessful, SteamGuard, TwoFactor, Captcha = range(
-        6)
+    Waiting, LoginFailed, LoginSuccessful, SteamGuard, TwoFactor, Captcha = list(range(
+        6))
 
 
 @unique
@@ -40,11 +42,11 @@ class SteamAPI(object):
     Provides a Python interface to the Steam Web API, for chat
     '''
 
-    from chat import _initialLoadFriends, _chatPoll, _loadFriendList, _chatUpdatePersona
-    from chat import chatLogon, chatMessage, chatLogoff
+    from .chat import _initialLoadFriends, _chatPoll, _loadFriendList, _chatUpdatePersona
+    from .chat import chatLogon, chatMessage, chatLogoff
 
-    from profile import setupProfile, editProfile, profileSettings, uploadAvatar
-    from market import getMarketApps
+    from .profile import setupProfile, editProfile, profileSettings, uploadAvatar
+    from .market import getMarketApps
 
     def __init__(self):
         self.oauth_client_id = "DE45CD61"
@@ -136,17 +138,18 @@ class SteamAPI(object):
 
         rsakey = rsakey.json()
 
-        mod = long(rsakey["publickey_mod"], 16)
-        exp = long(rsakey["publickey_exp"], 16)
+        mod = int(rsakey["publickey_mod"], 16)
+        exp = int(rsakey["publickey_exp"], 16)
         rsa_key = RSA.construct((mod, exp))
-        rsa = PKCS1_v1_5.PKCS115_Cipher(rsa_key)
+        # rsa = PKCS1_v1_5.PKCS115_Cipher(rsa_key)
+        rsa = PKCS1_v1_5.new(rsa_key)
 
         form = {
             "captcha_text": details.get("captcha", ""),
             "captchagid": self._captchaGid,
             "emailauth": details.get('steamguard', ""),
             "emailsteamid": "",
-            "password": base64.b64encode(rsa.encrypt(details["password"])),
+            "password": base64.b64encode(rsa.encrypt(bytes(details["password"], 'utf8'))),
             "remember_login": "true",
             "rsatimestamp": rsakey["timestamp"],
             "twofactorcode": details.get('twofactor', ""),
@@ -165,7 +168,8 @@ class SteamAPI(object):
         elif not dologin["success"] and dologin.get("requires_twofactor"):
             return LoginStatus.TwoFactor
         elif not dologin["success"] and dologin.get("captcha_needed"):
-            print "Captcha URL: https://steamcommunity.com/public/captcha.php?gid=" + dologin["captcha_gid"]
+            print(("Captcha URL: https://steamcommunity.com/public/captcha.php?gid=" +
+                  dologin["captcha_gid"]))
             self._captchaGid = dologin["captcha_gid"]
             return LoginStatus.Captcha
         elif not dologin["success"]:
@@ -239,7 +243,7 @@ class SteamAPI(object):
             return
 
         if unlock.status_code != 200:
-            logger.error('HTTP error %s', resp.status_code)
+            logger.error('HTTP error %s', unlock.status_code)
             return
 
         resp = unlock.json()
@@ -273,7 +277,7 @@ class SteamAPI(object):
 
         notifs = {}
 
-        for item, key in items.iteritems():
+        for item, key in list(items.items()):
             notifs[item] = resp['notifications'][str(key)]
 
         return notifs
@@ -309,7 +313,7 @@ class SteamAPI(object):
         if self._checkHttpError(resp):
             return ("HTTP Error", None)
 
-        token = re.compile(ur'"([0-9a-f]{32})"')
+        token = re.compile(r'"([0-9a-f]{32})"')
         matches = token.search(resp.text)
         if matches:
             self._initialLoadFriends(resp.text)

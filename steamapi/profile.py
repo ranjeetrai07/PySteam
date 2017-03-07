@@ -1,8 +1,7 @@
-import SteamID
+from __future__ import unicode_literals
 from enum import Enum, IntEnum, unique
 from . import *
 from pyquery import PyQuery as pq
-import os
 
 
 class StrEnum(str, Enum):
@@ -11,7 +10,7 @@ class StrEnum(str, Enum):
 
 @unique
 class PrivacyState(IntEnum):
-    Private, FriendsOnly, Public = range(1, 4)
+    Private, FriendsOnly, Public = list(range(1, 4))
 
 
 @unique
@@ -49,7 +48,7 @@ def editProfile(self, new_values=None):
         valid = ['personaName', 'real_name', 'country', 'state', 'city',
                  'customURL', 'summary', 'profile_background', 'primary_group_steamid']
 
-        return {k: v for k, v in values.items() if k in valid}
+        return {k: v for k, v in list(values.items()) if k in valid}
 
     def parseForValues(doc):
         values = {}
@@ -96,7 +95,7 @@ def profileSettings(self, new_values=None):
         valid = ['privacySetting', 'commentSetting',
                  'inventoryPrivacySetting', 'inventoryGiftPrivacy']
 
-        return {k: v for k, v in values.items() if k in valid}
+        return {k: v for k, v in list(values.items()) if k in valid}
 
     def parseForValues(doc):
         all_inputs = doc('#editForm :input').filter(
@@ -127,7 +126,7 @@ def profileSettings(self, new_values=None):
         return editables(values)
     else:
         values.update(new_values)
-        for k, v in editables(values).items():
+        for k, v in list(editables(values).items()):
             if k == 'inventoryGiftPrivacy':
                 values[k] = int(v)
             else:
@@ -140,7 +139,7 @@ def profileSettings(self, new_values=None):
         if error:
             return (error.text.strip(), editables(values))
 
-        print values
+        print(values)
         return (None, editables(values))
 
 
@@ -158,7 +157,8 @@ def uploadAvatar(self, image):
         'json': 1
     }
     files = {'avatar': image}
-    resp = self.session.post(CommunityURL('actions', 'FileUploader'), files=files, data=data)
+    resp = self.session.post(CommunityURL(
+        'actions', 'FileUploader'), files=files, data=data)
 
     if resp.status_code != 200:
         logger.error('HTTP error %s', resp.status_code)

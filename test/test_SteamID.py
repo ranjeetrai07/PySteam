@@ -160,7 +160,7 @@ def test_steamid64_rendering_individual():
     sid.type = SteamID.Type.INDIVIDUAL
     sid.instance = SteamID.Instance.DESKTOP
     sid.accountid = 46143802
-    assert sid.SteamID64 == 76561198006409530L
+    assert sid.SteamID64 == 76561198006409530
 
 
 def test_steamid64_anon_gameserver():
@@ -169,7 +169,7 @@ def test_steamid64_anon_gameserver():
     sid.type = SteamID.Type.ANON_GAMESERVER
     sid.instance = 188991
     sid.accountid = 42135013
-    assert sid.SteamID64 == 90883702753783269L
+    assert sid.SteamID64 == 90883702753783269
 
 
 def test_invalid_new_id():
