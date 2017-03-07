@@ -12,7 +12,6 @@ class StrEnum(str, Enum):
 class PrivacyState(IntEnum):
     Private, FriendsOnly, Public = list(range(1, 4))
 
-
 @unique
 class CommentPrivacyState(StrEnum):
     Private, FriendsOnly, Public = [

@@ -150,6 +150,24 @@ def chatLogoff(self):
         self.chatState = ChatState.Offline
 
 
+def addFriend(self, steamid):
+    form = {
+        "accept_invite": 0,
+        "sessionID": self.sessionID,
+        "steamid": str(SteamID.SteamID(steamid).SteamID64)
+    }
+    response = self.session.post(CommunityURL(
+        'actions', 'AddFriendAjax'), data=form)
+
+    if response.status_code != 200:
+        logger.error("Error in adding friend: %s", response.status_code)
+        response.raise_for_status()
+        return None
+
+    body = response.json()
+    return body["success"]
+
+
 def _chatPoll(self):
     '''
     Polls the Steam Web chat API for new events
@@ -185,7 +203,7 @@ def _chatPoll(self):
     self._chat['message'] = body.get("messagelast", "")
 
     for message in body.get("messages", []):
-        sender = SteamID.SteamID(message['accountid_from'])
+        sender = SteamID.SteamID.fromIndividualAccountID(message['accountid_from'])
 
         type_ = message["type"]
         if type_ == "personastate":

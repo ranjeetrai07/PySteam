@@ -1,4 +1,4 @@
-﻿import steamapi.SteamID as SteamID
+﻿from ..steamapi import SteamID as SteamID
 import pytest
 
 
@@ -83,7 +83,8 @@ def test_steamid64_construction_clan():
 
 
 def test_steamid32_construction_individual():
-    sid = SteamID.SteamID('46143802')
+    sid = SteamID.SteamID.fromIndividualAccountID('46143802')
+    print sid.__dict__
     assert sid.universe == SteamID.Universe.PUBLIC
     assert sid.type == SteamID.Type.INDIVIDUAL
     assert sid.instance == SteamID.Instance.DESKTOP

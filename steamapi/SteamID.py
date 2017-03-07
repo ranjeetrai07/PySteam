@@ -109,12 +109,19 @@ class SteamID(object):
             raise Exception("Not a valid steam format")
         else:
             inp = int(inp)
-            if len(str(inp)) == 8:
-                inp += 76561197960265728
             self.accountid = int(inp & 0xFFFFFFFF)
             self.instance = Instance((inp >> 32) & 0xFFFFF)
             self.type = Type((inp >> 52) & 0xF)
             self.universe = Universe(inp >> 56)
+
+    @staticmethod
+    def fromIndividualAccountID(accountid):
+        sid = SteamID()
+        sid.universe = SteamID.Universe.PUBLIC
+        sid.type = SteamID.Type.INDIVIDUAL
+        sid.instance = SteamID.Instance.DESKTOP
+        sid.accountid = int(accountid) if isinstance(accountid, (int, long)) or accountid.isdigit() else 0
+        return sid
 
     def isValid(self):
         if self.type <= Type.INVALID or self.type > Type.ANON_USER:
