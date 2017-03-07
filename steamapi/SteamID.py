@@ -120,7 +120,7 @@ class SteamID(object):
         sid.universe = SteamID.Universe.PUBLIC
         sid.type = SteamID.Type.INDIVIDUAL
         sid.instance = SteamID.Instance.DESKTOP
-        sid.accountid = int(accountid) if isinstance(accountid, (int, long)) or accountid.isdigit() else 0
+        sid.accountid = int(accountid) if isinstance(accountid, int) or accountid.isdigit() else 0
         return sid
 
     def isValid(self):
