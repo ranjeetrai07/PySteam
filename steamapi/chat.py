@@ -172,6 +172,9 @@ def _chatPoll(self):
     '''
     Polls the Steam Web chat API for new events
     '''
+    if self.chatState == ChatState.Offline or not 'umqid' in self._chat:
+        return None
+
     form = {
         "umqid": self._chat["umqid"],
         "message": self._chat["message"],
@@ -184,9 +187,6 @@ def _chatPoll(self):
 
     response = self.session.post(
         APIUrl("ISteamWebUserPresenceOAuth", "Poll"), data=form)
-
-    if self.chatState == ChatState.Offline:
-        return None
 
     self.timer(self._chat['interval'] / 1000.0, self._chatPoll)
 
