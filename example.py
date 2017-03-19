@@ -14,9 +14,19 @@ def chatPersonaState(steamID, persona, old_persona):
 
 
 @steam.event.on('chatMessage')
-def chatMessage(sender, text):
-    friend = steam.chatFriends[str(sender.SteamID64)]
-    print("({nickname}) {personaName}: {text}".format(text=text, **friend))
+def chatMessage(sender, text, own):
+    # keep in mind that when `own` is true, the sender is infact
+    # the recipient of the message, with the actual sender being
+    # `steam.steamID` (yourself)
+    # (you can get your own persona through `steam.accountPersona`)
+    # this only happens when using multiple clients for chat AFAIK
+
+    friend = steam.chatFriends[str(sender)]
+    if not own:
+        print("({nickname}) {personaName}: {text}".format(text=text, **friend))
+    else:
+        yourself = steam.accountPersona["personaName"]
+        print("{yourself} -> ({nickname}) {personaName}: {text}".format(text=text, yourself=yourself, **friend))
 
     if text.lower() == "ping":
         steam.chatMessage(sender, "pong")

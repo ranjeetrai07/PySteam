@@ -43,7 +43,12 @@ def chatPersonaStateHandler(steamID, nextPersona, prevPersona):
     pass
 
 @steam.event.on('chatMessage')
-def chatMessageHandler(sender, text):
+def chatMessageHandler(sender, text, own):
+    # keep in mind that when `own` is true, the sender is infact
+    # the recipient of the message, with the actual sender being
+    # steam.steamID (yourself)
+    # (you can get your own persona through steam.accountPersona)
+    # this only happens when using multiple clients for chat AFAIK
     print steam.chatFriends[str(sender.SteamID64)]["personaName"] + ':', text
     if text.lower() == "ping":
         steam.chatMessage(sender, "pong")
@@ -121,7 +126,8 @@ A **persona** is a dictionary of user info, usually like so:
     'personaName': 'anzu',
     'personaState': <PersonaState.Away: 3>,
     'personaStateFlags': <PersonaStateFlag.Default: 0>,
-    'steamID': SteamID.SteamID('76561198029444182')
+    'steamID': SteamID.SteamID('76561198029444182'),
+    'nickname': None
 }
 ```
 

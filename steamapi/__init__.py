@@ -42,7 +42,7 @@ class SteamAPI(object):
     Provides a Python interface to the Steam Web API, for chat
     '''
 
-    from .chat import _initialLoadDetails, _chatPoll, _loadFriendList, _chatUpdatePersona
+    from .chat import _initialLoadDetails, _chatPoll, _loadFriendList, _chatUpdatePersona, _pollFailed, _relogWebChat
     from .chat import chatLogon, chatMessage, chatLogoff, getWebApiOauthToken, getChatHistory
 
     from .profile import setupProfile, editProfile, profileSettings, uploadAvatar

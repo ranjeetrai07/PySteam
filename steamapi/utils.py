@@ -3,7 +3,7 @@ import logging
 import codecs
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(40)
+logger.setLevel(logging.DEBUG)
 
 
 def CommunityURL(namespace, method):

@@ -32,6 +32,11 @@ class PersonaStateFlag(IntEnum):
     OnlineUsingMobile = 512
     OnlineUsingBigPicture = 1024
 
+# chat constants taken from chat.js
+POLL_DEFAULT_TIMEOUT = 20
+POLL_SUCCESS_INCREMENT = 5
+POLL_MAX_TIMEOUT = 120
+
 
 def getWebApiOauthToken(self):
     '''
@@ -119,13 +124,24 @@ def chatLogon(self, interval=500, uiMode="web", cookie_file=None):
 
         return self.chatState
 
+    self._chat = {
+        "accessToken": token,
+        "interval": interval,
+        "uiMode": uiMode,
+        "pollid": 1,
+        "sectimeout": POLL_DEFAULT_TIMEOUT,
+        "reconnectTimer": -1
+    }
+
     login = self.session.post(
         APIUrl("ISteamWebUserPresenceOAuth", "Logon"), data={"ui_mode": uiMode, "access_token": token})
 
     if login.status_code != 200:
         self.chatState = ChatState.LogOnFailed
         logger.error("Error logging into webchat (%s)", login.status_code)
-        self.timer(5.0, self.chatLogon)
+        # self.timer(5.0, self.chatLogon)
+        self._chat["reconnectTimer"] = -1
+        self._relogWebChat()
         return self.chatState
 
     login_data = login.json()
@@ -136,20 +152,17 @@ def chatLogon(self, interval=500, uiMode="web", cookie_file=None):
         self.timer(5.0, self.chatLogon)
         return self.chatState
 
-    self._chat = {
+    self._chat.update({
         "umqid": login_data["umqid"],
-        "message": login_data["message"],
-        "accessToken": token,
-        "interval": interval,
-        "uiMode": uiMode
-    }
+        "message": login_data["message"]
+    })
 
     if cookie_file:
         self.save_cookies(cookie_file)
 
     self.chatState = ChatState.LoggedOn
     self.emit('chatLoggedOn')
-    self._chatPoll()
+    self.timer(self._chat.get('interval', 500) / 1000.0, self._chatPoll, ())
     return ChatState.LoggedOn
 
 
@@ -246,42 +259,56 @@ def _chatPoll(self):
     Polls the Steam Web chat API for new events
     '''
     # or not 'umqid' in self._chat
-    if self.chatState == ChatState.Offline or not 'umqid' in self._chat:
-        return None
+    # if self.chatState == ChatState.Offline or not 'umqid' in self._chat:
+    #     self._pollFailed()
+    #     return
+
+    self._chat["pollid"] += 1
 
     form = {
-        "umqid": self._chat.get("umqid"),
-        "message": self._chat.get("message"),
-        "pollid": 1,
-        "sectimeout": 20,
+        "umqid": self._chat["umqid"],
+        "message": self._chat["message"],
+        "pollid": self._chat["pollid"],
+        "sectimeout": self._chat["sectimeout"],
         "secidletime": 0,
         "use_accountids": 1,
-        "access_token": self._chat.get("accessToken")
+        "access_token": self._chat["accessToken"]
     }
 
     response = self.session.post(
-        APIUrl("ISteamWebUserPresenceOAuth", "Poll"), data=form)
-
-    self.timer(self._chat.get('interval', 500) / 1000.0, self._chatPoll)
+        APIUrl("ISteamWebUserPresenceOAuth", "Poll"), data=form, timeout=self._chat["sectimeout"] + 5)
 
     try:
         body = response.json()
     except:
         body = {}
 
-    if response.status_code != 200:
-        if body.get("message") == "Not Logged On":
-            self._relogWebChat()
+    if body.get("pollid") != self._chat["pollid"]:
+        # discard old responses
+        # dunno if this should be possible
+        return
+
+    if body.get("message") == "Not Logged On":
+        self._relogWebChat()
+
+    if response.status_code != 200 and "error" not in body:
         logger.error("Error in chat poll: %s", response.status_code)
         response.raise_for_status()
-        return None
-
-    if body["error"] != "OK":
-        if body.get("message") == "Not Logged On":
-            self._relogWebChat()
+        self._pollFailed()
+    elif body["error"] != "OK":
         logger.warning("Error in chat poll: %s", body["error"])
+        if body["error"] == "Timeout":
+            if "sectimeout" in body and body["sectimeout"] > POLL_DEFAULT_TIMEOUT:
+                self._chat["sectimeout"] = body["sectimeout"]
 
-    self._chat['message'] = body.get("messagelast", "")
+            if self._chat["sectimeout"] < POLL_MAX_TIMEOUT:
+                self._chat["sectimeout"] = min(
+                    self._chat["sectimeout"] + POLL_SUCCESS_INCREMENT, POLL_MAX_TIMEOUT)
+        else:
+            self._pollFailed()
+            return
+
+    self._chat['message'] = body.get("messagelast", self._chat['message'])
 
     for message in body.get("messages", []):
         sender = SteamID.SteamID.fromIndividualAccountID(
@@ -290,17 +317,49 @@ def _chatPoll(self):
         type_ = message["type"]
         if type_ == "personastate":
             self._chatUpdatePersona(sender)
-        elif type_ == "saytext":
-            self.emit('chatMessage', sender, message["text"])
+        elif type_ == "saytext" or type_ == "my_saytext":
+            self.emit('chatMessage', sender, message["text"], type_ == "my_saytext")
         elif type_ == "typing":
             self.emit('chatTyping', sender)
+        elif type_ == "personarelationship":
+            # what is this?
+            print("type == personarelationship:")
+            print(message)
         else:
             logger.warning("Unhandled message type: %s", type_)
 
+    self.chatState = ChatState.LoggedOn
+    self._chat["consecutivePollFailures"] = 0
+    # self.timer(self._chat.get('interval', 500) / 1000.0, self._chatPoll)
+    self._chatPoll()
+
+
+def _pollFailed(self):
+    failures = self._chat.get("consecutivePollFailures", 0) + 1
+    self._chat["consecutivePollFailures"] = failures
+    self.chatState = ChatState.Offline
+
+    if failures == 1:
+        if self._chat["sectimeout"] > POLL_DEFAULT_TIMEOUT:
+            self._chat["sectimeout"] -= POLL_SUCCESS_INCREMENT
+
+    if failures < 3:
+        self.timer(self._chat.get('interval', 500) / 1000.0, self._chatPoll)
+    else:
+        self._relogWebChat()
+
 
 def _relogWebChat(self):
+    if self._chat.setdefault("reconnectTimer", -1) != -1:
+        return
+
     self.chatState = ChatState.Offline
-    self.chatLogon(self._chat.get("interval"), self._chat.get("uiMode"))
+    self._chat["reconnectTimer"] = 5
+
+    if "interval" in self._chat and "uiMode" in self._chat:
+        self.chatLogon(self._chat.get("interval"), self._chat.get("uiMode"))
+    else:
+        self.chatLogon()
 
 
 def _loadFriendList(self):
@@ -336,8 +395,11 @@ def _chatUpdatePersona(self, steamID):
         CommunityURL("chat", "friendstate") + str(accnum))
 
     if response.status_code != 200:
+        if response.status_code == 401:
+            # not authed?
+            self._relogWebChat()
         logger.error("Chat update persona error: %s", response.status_code)
-        self.timer(2.0, self._chatUpdatePersona, (steamID))
+        self.timer(2.0, self._chatUpdatePersona, (steamID,))
         return None
 
     if str(steamID) in self.chatFriends:
