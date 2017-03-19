@@ -59,6 +59,7 @@ class SteamAPI(object):
         self.session.cookies.set("timezoneOffset", "0,0")
         self.session.cookies.set("mobileClientVersion", "0 (2.1.3)")
         self.session.cookies.set("mobileClient", "android")
+        self.session.hooks = dict(response=self._validateResponse)
 
         self.jarLoaded = False
 
@@ -73,6 +74,10 @@ class SteamAPI(object):
             "user-agent": "Mozilla/5.0 (Linux; U; Android 4.1.1; en-us; Google Nexus 4 - 4.1.1 - API 16 - 768x1280 Build/JRO03S) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
             "accept": "text/javascript, text/html, application/xml, text/xml, */*"
         }
+
+    def _validateResponse(self, r, *args, **kwargs):
+        self._checkHttpError(r)
+        self._checkCommunityError(r.text)
 
     def save_cookies(self, filename):
         '''
@@ -113,11 +118,24 @@ class SteamAPI(object):
         Checks for Steam's definition of an error
         '''
         if response.status_code >= 300 and response.status_code <= 399 and "/login" in response.headers["location"]:
-            self.emit('sessionExpired', response.status_code)
+            self.emit('sessionExpired')
             return True
 
         if response.status_code >= 400:
             response.raise_for_status()
+            return True
+
+        return False
+
+    def _checkCommunityError(self, body):
+        '''
+        Checks for Steam's definition of an error (in the community)
+        '''
+        if re.search(r"<h1>Sorry!<\/h1>", body):
+            return True
+
+        if re.search(r"g_steamID = false;", body) and re.search(r"<h1>Sign In<\/h1>", body):
+            self.emit('sessionExpired')
             return True
 
         return False
