@@ -15,7 +15,9 @@ def chatPersonaState(steamID, persona, old_persona):
 
 @steam.event.on('chatMessage')
 def chatMessage(sender, text):
-    print(steam.chatFriends[str(sender.SteamID64)]["personaName"] + ':', text)
+    friend = steam.chatFriends[str(sender.SteamID64)]
+    print("({nickname}) {personaName}: {text}".format(text=text, **friend))
+
     if text.lower() == "ping":
         steam.chatMessage(sender, "pong")
 

@@ -18,7 +18,7 @@ def generateSessionID():
     '''
     Generates a "random" session ID for Steam
     '''
-    return str(codecs.getencoder('hex')(Random.get_random_bytes(12))[0])
+    return codecs.getencoder('hex')(Random.get_random_bytes(12))[0].decode('utf-8')
 
 
 def urlForAvatarHash(hashed, quality="full"):

@@ -42,8 +42,8 @@ class SteamAPI(object):
     Provides a Python interface to the Steam Web API, for chat
     '''
 
-    from .chat import _initialLoadFriends, _chatPoll, _loadFriendList, _chatUpdatePersona
-    from .chat import chatLogon, chatMessage, chatLogoff
+    from .chat import _initialLoadDetails, _chatPoll, _loadFriendList, _chatUpdatePersona
+    from .chat import chatLogon, chatMessage, chatLogoff, getWebApiOauthToken, getChatHistory
 
     from .profile import setupProfile, editProfile, profileSettings, uploadAvatar
     from .market import getMarketApps
@@ -168,8 +168,8 @@ class SteamAPI(object):
         elif not dologin["success"] and dologin.get("requires_twofactor"):
             return LoginStatus.TwoFactor
         elif not dologin["success"] and dologin.get("captcha_needed"):
-            print(("Captcha URL: https://steamcommunity.com/public/captcha.php?gid=" +
-                  dologin["captcha_gid"]))
+            print("Captcha URL: https://steamcommunity.com/public/captcha.php?gid=" +
+                  dologin["captcha_gid"])
             self._captchaGid = dologin["captcha_gid"]
             return LoginStatus.Captcha
         elif not dologin["success"]:
@@ -304,19 +304,3 @@ class SteamAPI(object):
             return LoggedIn.LoggedIn
 
         return LoggedIn.GeneralError
-
-    def getWebApiOauthToken(self):
-        '''
-        Retrives necessary OAuth token for Steam Web chat
-        '''
-        resp = self.session.get("https://steamcommunity.com/chat")
-        if self._checkHttpError(resp):
-            return ("HTTP Error", None)
-
-        token = re.compile(r'"([0-9a-f]{32})"')
-        matches = token.search(resp.text)
-        if matches:
-            self._initialLoadFriends(resp.text)
-            return (None, matches.group().replace('"', ''))
-
-        return ("Malformed Response", None)
