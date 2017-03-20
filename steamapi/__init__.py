@@ -38,9 +38,8 @@ class LoggedIn(IntEnum):
 
 
 class SteamAPI(object):
-    '''
-    Provides a Python interface to the Steam Web API, for chat
-    '''
+    """Provides a Python interface to the Steam Web API
+    """
 
     from .chat import _initialLoadDetails, _chatPoll, _loadFriendList, _chatUpdatePersona, _pollFailed, _relogWebChat
     from .chat import chatLogon, chatMessage, chatLogoff, getWebApiOauthToken, getChatHistory
@@ -55,6 +54,14 @@ class SteamAPI(object):
         self.chatState = ChatState.Offline
         self.event = EventEmitter()
 
+        self._mobileHeaders = {
+            "X-Requested-With": "com.valvesoftware.android.steam.community",
+            "referer": "https://steamcommunity.com/mobilelogin?oauth_client_id=DE45CD61&oauth_scope=read_profile%20write_profile%20read_client%20write_client",
+            "user-agent": "Mozilla/5.0 (Linux; U; Android 4.1.1; en-us; Google Nexus 4 - 4.1.1 - API 16 - 768x1280 Build/JRO03S) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
+            "accept": "text/javascript, text/html, application/xml, text/xml, */*"
+        }
+
+        self.session.headers = self._mobileHeaders
         self.session.cookies.set("Steam_Language", "english")
         self.session.cookies.set("timezoneOffset", "0,0")
         self.session.cookies.set("mobileClientVersion", "0 (2.1.3)")
@@ -68,29 +75,34 @@ class SteamAPI(object):
 
         self.chatFriends = {}
 
-        self._mobileHeaders = {
-            "X-Requested-With": "com.valvesoftware.android.steam.community",
-            "referer": "https://steamcommunity.com/mobilelogin?oauth_client_id=DE45CD61&oauth_scope=read_profile%20write_profile%20read_client%20write_client",
-            "user-agent": "Mozilla/5.0 (Linux; U; Android 4.1.1; en-us; Google Nexus 4 - 4.1.1 - API 16 - 768x1280 Build/JRO03S) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
-            "accept": "text/javascript, text/html, application/xml, text/xml, */*"
-        }
-
     def _validateResponse(self, r, *args, **kwargs):
+        """Checks a Steam web response for any errors.
+        """
         self._checkHttpError(r)
         self._checkCommunityError(r.text)
 
     def save_cookies(self, filename):
-        '''
-        Dumps cookies to a file
-        '''
+        """
+        Saves session cookies to a given filename.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to save cookies to.
+        """
         with open(filename, 'w') as f:
             f.truncate()
             pickle.dump(self.session.cookies._cookies, f)
 
     def load_cookies(self, filename):
-        '''
-        Loads cookies from a previous cookie dump
-        '''
+        """
+        Loads session cookies from a given filename.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to load cookies from.
+        """
         if not os.path.isfile(filename):
             return False
 
@@ -106,17 +118,42 @@ class SteamAPI(object):
         return True
 
     def emit(self, event, *data):
+        """The default emit implementation.
+
+        This is normally intended to be replaced should this library
+        need to be used in specific event cases, such as Qt.
+
+        Parameters
+        ----------
+        event : str
+            The event to be emitted.
+        *data
+            The data to be passed to the callback
+        """
         self.event.emit(event, *data)
 
-    def timer(self, interval, func, args=()):
-        timer = Timer(interval, func, args)
+    def timer(self, delay, func, args=()):
+        """The default timer implementation.
+
+        This is normally intended to be replaced should this library
+        need to be used in specific timing cases, such as Qt.
+
+        Parameters
+        ----------
+        delay : int or float
+            How many seconds to wait before calling ``func``.
+        func : function
+            The function to call when <delay> seconds pass.
+        args : tuple, optional
+            The arguments to pass to ``func``.
+        """
+        timer = Timer(delay, func, args)
         timer.daemon = True
         timer.start()
 
     def _checkHttpError(self, response):
-        '''
-        Checks for Steam's definition of an error
-        '''
+        """Checks for Steam's definition of an error
+        """
         if response.status_code >= 300 and response.status_code <= 399 and "/login" in response.headers["location"]:
             self.emit('sessionExpired')
             return True
@@ -128,9 +165,8 @@ class SteamAPI(object):
         return False
 
     def _checkCommunityError(self, body):
-        '''
-        Checks for Steam's definition of an error (in the community)
-        '''
+        """Checks for Steam's definition of an error (in the community)
+        """
         if re.search(r"<h1>Sorry!<\/h1>", body):
             return True
 
@@ -140,15 +176,12 @@ class SteamAPI(object):
 
         return False
 
-    def login(self, cookie_file=None, **details):
+    def login(self, **details):
         '''
         Initiates login for Steam Web chat.
         '''
-        if cookie_file:
-            self.load_cookies(cookie_file)
-
         rsakey = self.session.post(CommunityURL("login", "getrsakey"), data={
-            "username": details["username"]}, headers=self._mobileHeaders)
+            "username": details["username"]})
 
         if rsakey.status_code != requests.codes.ok:
             rsakey.raise_for_status()
@@ -178,7 +211,7 @@ class SteamAPI(object):
         }
 
         dologin = self.session.post(
-            CommunityURL("login", "dologin"), data=form, headers=self._mobileHeaders).json()
+            CommunityURL("login", "dologin"), data=form).json()
 
         self._cache = details
         if not dologin["success"] and dologin.get("emailauth_needed"):
@@ -205,9 +238,6 @@ class SteamAPI(object):
             self.steamguard = str(self.steamID) + "||" + \
                 self.session.cookies.get(
                     "steamMachineAuth" + str(self.steamID), '')
-
-            if cookie_file:
-                self.save_cookies(cookie_file)
 
             return LoginStatus.LoginSuccessful
 
