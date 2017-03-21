@@ -294,7 +294,6 @@ def getChatHistory(self, steamid):
 
     if resp.status_code != 200:
         logger.error("Error in loading chatlog: %s", resp.status_code)
-        resp.raise_for_status()
         return []
 
     parsed = []
@@ -339,7 +338,6 @@ def addFriend(self, steamid):
 
     if response.status_code != 200:
         logger.error("Error in adding friend: %s", response.status_code)
-        response.raise_for_status()
         return None
 
     try:
@@ -392,7 +390,6 @@ def _chatPoll(self):
 
     if response.status_code != 200 and "error" not in body:
         logger.error("Error in chat poll: %s", response.status_code)
-        response.raise_for_status()
         self._pollFailed()
         return
     elif body["error"] != "OK":
@@ -512,6 +509,8 @@ def _loadFriendList(self):
         APIUrl("ISteamUserOAuth", "GetFriendList", version="0001"), params=form)
 
     if response.status_code != 200:
+        if response.status_code == 401: # Client Error: Unauthorized
+            self._relogWebChat()
         logger.error("Load friends error: %s", response.status_code)
         self.timer(2.0, self._loadFriendList)
         return None
@@ -536,8 +535,7 @@ def _chatUpdatePersona(self, steamID):
         CommunityURL("chat", "friendstate") + str(accnum))
 
     if response.status_code != 200:
-        if response.status_code == 401:
-            # not authed?
+        if response.status_code == 401: # Client Error: Unauthorized
             self._relogWebChat()
         logger.error("Chat update persona error: %s", response.status_code)
         self.timer(2.0, self._chatUpdatePersona, (steamID,))

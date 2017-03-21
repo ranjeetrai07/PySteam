@@ -159,7 +159,7 @@ class SteamAPI(object):
             return True
 
         if response.status_code >= 400:
-            response.raise_for_status()
+            # response.raise_for_status()
             return True
 
         return False
