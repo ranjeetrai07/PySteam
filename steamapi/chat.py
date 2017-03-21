@@ -33,6 +33,21 @@ class PersonaState(IntEnum):
 
 
 @unique
+class FriendRelationship(IntEnum):
+    """Possible friend relationship values.
+    """
+    NONE = 0
+    Blocked = 1
+    RequestRecipient = 2
+    Friend = 3
+    RequestInitiator = 4
+    Ignored = 5
+    IgnoredFriend = 6
+    SuggestedFriend = 7
+    Max = 8
+
+
+@unique
 class PersonaStateFlag(IntEnum):
     """Possible state flags.
     """

@@ -20,7 +20,7 @@ from .utils import CommunityURL, APIUrl, generateSessionID, urlForAvatarHash
 from .utils import dictDiff
 
 # enums in other modules
-from .chat import ChatState, PersonaState, PersonaStateFlag
+from .chat import ChatState, PersonaState, PersonaStateFlag, FriendRelationship
 from .profile import PrivacyState, CommentPrivacyState
 
 
