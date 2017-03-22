@@ -133,7 +133,7 @@ A **persona** is a dictionary of user info, usually like so:
 ```
 
 * `avatar_hash` is the hash of the user's Steam avatar.
-    * Use `SteamAPI.urlForAvatarHash(avatarHash)` to get the full URL.
+    * Use `steamapi.utils.url_avatar(avatar_hash)` to get the full URL.
 * `ingame` is a boolean describing if the user is currently playing a game on Steam or not.
 * `ingame_app_id` is the Steam AppID of the game currently being played if `inGame` is true, else it is `None`.
 * `ingame_name` is the name of the game currently being played if `inGame` is true, else it is `None`.
