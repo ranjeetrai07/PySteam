@@ -1,48 +1,55 @@
 from __future__ import unicode_literals
-from enum import Enum, IntEnum, unique
-from . import *
+from .session import session
+from . import utils
+from . import enums
 from pyquery import PyQuery as pq
+import logging
+logger = logging.getLogger(__name__)
 
 
-class StrEnum(str, Enum):
-    pass
+@staticmethod
+def setup_profile():
+    """Initiates a new Steam Profile
+    """
+    resp = session.get(utils.url_community(
+        'profiles', str(utils.get_steam_id())) + 'edit?welcomed=1')
+    return resp and resp.ok
 
 
-@unique
-class PrivacyState(IntEnum):
-    Private, FriendsOnly, Public = list(range(1, 4))
+@staticmethod
+def edit_profile(new_values=None):
+    """Updates your Steam profile information.
 
-@unique
-class CommentPrivacyState(StrEnum):
-    Private, FriendsOnly, Public = [
-        "commentselfonly",
-        "commentfriendsonly",
-        "commentanyone"
-    ]
-
-
-def setupProfile(self):
-    ''' Initiates a new Steam Profile '''
-    resp = self.session.get(
-        CommunityURL('profiles', str(self.steamID)) + 'edit?welcomed=1')
-    return resp and resp.status_code == 200
-
-
-def editProfile(self, new_values=None):
-    '''
-    Allows changes to your Steam profile information.
     Current values are returned if `new_values` is not supplied.
-    Supported values for editing are:
-        - `personaName`
-        - `real_name`
-        - `country`
-        - `state`
-        - `city`
-        - `customURL`
-        - `summary`
-        - `profile_background`
-        - `primary_group_steamid`
-    '''
+
+    Supported values for editing are
+    --------------------------------
+    - `personaName`
+    - `real_name`
+    - `country`
+    - `state`
+    - `city`
+    - `customURL`
+    - `summary`
+    - `profile_background`
+    - `primary_group_steamid`
+
+    Parameters
+    ----------
+    new_values : dict, optional
+        Dict with editable values, for example::
+
+            {
+                'personaName': 'new display name',
+                'summary': 'coolest guy ever'
+            }
+
+    Returns
+    -------
+    tuple of (error: str or None, dict)
+        `(error, current values)` if `new_values` is not provided,
+        else `(error, new values)`.
+    """
     def editables(values):
         valid = ['personaName', 'real_name', 'country', 'state', 'city',
                  'customURL', 'summary', 'profile_background', 'primary_group_steamid']
@@ -62,16 +69,17 @@ def editProfile(self, new_values=None):
 
         return values
 
-    edit_url = CommunityURL('profiles', str(self.steamID)) + 'edit'
-    doc = pq(self.session.get(edit_url).text)
+    edit_url = utils.url_community(
+        'profiles', str(utils.get_steam_id())) + 'edit'
+    doc = pq(session.get(edit_url).text)
 
     values = parseForValues(doc)
 
     if not new_values:
-        return editables(values)
+        return (None, editables(values))
     else:
         values.update(new_values)
-        update_resp = pq(self.session.post(edit_url, data=values).text)
+        update_resp = pq(session.post(edit_url, data=values).text)
         values = parseForValues(update_resp)
         error = update_resp('#errorText .formRowFields')
         if error:
@@ -80,16 +88,35 @@ def editProfile(self, new_values=None):
         return (None, editables(values))
 
 
-def profileSettings(self, new_values=None):
-    '''
-    Allows changes to your Steam permissions.
+@staticmethod
+def edit_privacy_settings(new_values=None):
+    """Updates your Steam privacy settings.
+
     Current values are returned if `new_values` is not supplied.
-    Supported values for editing are:
-        - `privacySetting`
-        - `commentSetting`
-        - `inventoryPrivacySetting`
-        - `inventoryGiftPrivacy`
-    '''
+
+    Supported values for editing are
+    --------------------------------
+    - `privacySetting`
+    - `commentSetting`
+    - `inventoryPrivacySetting`
+    - `inventoryGiftPrivacy`
+
+    Parameters
+    ----------
+    new_values : dict, optional
+        Dict with editable values, for example::
+
+            {
+                'personaName': 'new display name',
+                'summary': 'coolest guy ever'
+            }
+
+    Returns
+    -------
+    tuple of (error: str or None, dict)
+        `(error, current values)` if `new_values` is not provided,
+        else `(error, new values)`.
+    """
     def editables(values):
         valid = ['privacySetting', 'commentSetting',
                  'inventoryPrivacySetting', 'inventoryGiftPrivacy']
@@ -105,9 +132,9 @@ def profileSettings(self, new_values=None):
         for inp in doc('#editForm input:checked'):
             values[inp.name] = inp.value
             if inp.name in ['privacySetting', 'inventoryPrivacySetting']:
-                values[inp.name] = PrivacyState(int(inp.value))
+                values[inp.name] = enums.PrivacyState(int(inp.value))
             if inp.name == 'commentSetting':
-                values[inp.name] = CommentPrivacyState(inp.value)
+                values[inp.name] = enums.CommentPrivacyState(inp.value)
 
         if values['inventoryGiftPrivacy'] is not None:
             values['inventoryGiftPrivacy'] = bool(
@@ -117,12 +144,13 @@ def profileSettings(self, new_values=None):
 
         return values
 
-    edit_url = CommunityURL('profiles', str(self.steamID)) + 'edit/settings'
-    doc = pq(self.session.get(edit_url).text)
+    edit_url = utils.url_community('profiles', str(
+        utils.get_steam_id())) + 'edit/settings'
+    doc = pq(session.get(edit_url).text)
     values = parseForValues(doc)
 
     if not new_values:
-        return editables(values)
+        return (None, editables(values))
     else:
         values.update(new_values)
         for k, v in list(editables(values).items()):
@@ -131,45 +159,51 @@ def profileSettings(self, new_values=None):
             else:
                 values[k] = v.value
 
-        resp = self.session.post(edit_url, data=values)
+        resp = session.post(edit_url, data=values)
         update_resp = pq(resp.text)
         values = parseForValues(update_resp)
         error = update_resp('#errorText .formRowFields')
         if error:
             return (error.text.strip(), editables(values))
 
-        print(values)
         return (None, editables(values))
 
 
-def uploadAvatar(self, image):
-    '''
-    Sets the current account's avatar on Steam.
-    `image` should be a file-like object, in binary mode.
-    '''
+@staticmethod
+def upload_avatar(image):
+    """Sets the current account's avatar on Steam.
+
+    Parameters
+    ----------
+    image : file
+        File-like object, in binary mode.
+    """
     data = {
         'MAX_FILE_SIZE': 1048576,
         'type': 'player_avatar_image',
-        'sId': self.steamID.SteamID64,
-        'sessionid': self.sessionID,
+        'sId': str(utils.get_steam_id()),
+        'sessionid': utils.get_session_id(),
         'doSub': 1,
         'json': 1
     }
+
     files = {'avatar': image}
-    resp = self.session.post(CommunityURL(
+    resp = session.post(utils.url_community(
         'actions', 'FileUploader'), files=files, data=data)
 
-    if resp.status_code != 200:
-        logger.error('HTTP error %s', resp.status_code)
+    if not resp.ok:
+        logger.error('Avatar upload: HTTP error %s', resp.status_code)
         return
 
-    body = resp.json()
+    try:
+        body = resp.json()
+    except:
+        body = {}
+
     if not body or not body.get('success'):
-        logger.error('Malformed response')
-        return
+        logger.error('Avatar upload: Malformed response')
 
     if not body.get('success') and body.get('message'):
-        logger.error(body['message'])
-        return
+        logger.error('Avatar upload: %s', body['message'])
 
     return body

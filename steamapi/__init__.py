@@ -3,96 +3,61 @@ from builtins import bytes
 import base64
 import json
 import re
-from enum import IntEnum, unique
-from threading import Timer
 import pickle
 import os
 import requests
+from io import open
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
-from pyee import EventEmitter
-from . import SteamID
+from .steamid import SteamID
+from .session import session
+from .chat import Chat
+from . import utils
+from . import enums
 
-# set up logging
-from .utils import logger
-
-from .utils import CommunityURL, APIUrl, generateSessionID, urlForAvatarHash
-from .utils import dictDiff
-
-# enums in other modules
-from .chat import ChatState, PersonaState, PersonaStateFlag, FriendRelationship
-from .profile import PrivacyState, CommentPrivacyState
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-@unique
-class LoginStatus(IntEnum):
-    Waiting, LoginFailed, LoginSuccessful, SteamGuard, TwoFactor, Captcha = list(range(
-        6))
-
-
-@unique
-class LoggedIn(IntEnum):
-    GeneralError = 0
-    LoggedIn = 1
-    FamilyView = 2
-
-
-class SteamAPI(object):
+class steamapi(object):
     """Provides a Python interface to the Steam Web API
     """
 
-    from .chat import _initialLoadDetails, _chatPoll, _loadFriendList, _chatUpdatePersona, _pollFailed, _relogWebChat
-    from .chat import chatLogon, chatMessage, chatLogoff, getWebApiOauthToken, getChatHistory
+    event = utils.emitter
+    chat = Chat()
+    session = session
 
-    from .profile import setupProfile, editProfile, profileSettings, uploadAvatar
-    from .market import getMarketApps
+    from .profile import setup_profile, edit_profile, edit_privacy_settings, upload_avatar
 
     def __init__(self):
         self.oauth_client_id = "DE45CD61"
-        self.session = requests.Session()
         self._captchaGid = -1
-        self.chatState = ChatState.Offline
-        self.event = EventEmitter()
 
-        self._mobileHeaders = {
-            "X-Requested-With": "com.valvesoftware.android.steam.community",
-            "referer": "https://steamcommunity.com/mobilelogin?oauth_client_id=DE45CD61&oauth_scope=read_profile%20write_profile%20read_client%20write_client",
-            "user-agent": "Mozilla/5.0 (Linux; U; Android 4.1.1; en-us; Google Nexus 4 - 4.1.1 - API 16 - 768x1280 Build/JRO03S) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30",
-            "accept": "text/javascript, text/html, application/xml, text/xml, */*"
-        }
-
-        self.session.headers = self._mobileHeaders
-        self.session.cookies.set("Steam_Language", "english")
-        self.session.cookies.set("timezoneOffset", "0,0")
-        self.session.cookies.set("mobileClientVersion", "0 (2.1.3)")
-        self.session.cookies.set("mobileClient", "android")
-        self.session.hooks = dict(response=self._validateResponse)
-
-        self.jarLoaded = False
-
-        self._timers = []
+        # cache to store login credentials for two-factor usage
         self._cache = {}
 
-        self.chatFriends = {}
-
-    def _validateResponse(self, r, *args, **kwargs):
-        """Checks a Steam web response for any errors.
-        """
-        self._checkHttpError(r)
-        self._checkCommunityError(r.text)
+        self.steam_id = SteamID()
+        self.oauth_token = ""
+        self._matchine_auth = ""
+        self.steamguard = "||"
 
     def save_cookies(self, filename):
-        """
-        Saves session cookies to a given filename.
+        """Saves session cookies to a given filename.
 
         Parameters
         ----------
         filename : str
             The filename to save cookies to.
         """
-        with open(filename, 'w') as f:
-            f.truncate()
-            pickle.dump(self.session.cookies._cookies, f)
+        try:
+            with open(filename, 'wb') as f:
+                f.truncate()
+                pickle.dump(session.cookies._cookies, f)
+        except:
+            return False
+
+        return True
 
     def load_cookies(self, filename):
         """
@@ -106,86 +71,47 @@ class SteamAPI(object):
         if not os.path.isfile(filename):
             return False
 
-        with open(filename) as f:
+        with open(filename, 'rb') as f:
             cookies = pickle.load(f)
             if cookies:
                 jar = requests.cookies.RequestsCookieJar()
                 jar._cookies = cookies
-                self.session.cookies = jar
+                session.cookies = jar
             else:
                 return False
 
         return True
 
-    def emit(self, event, *data):
-        """The default emit implementation.
-
-        This is normally intended to be replaced should this library
-        need to be used in specific event cases, such as Qt.
-
-        Parameters
-        ----------
-        event : str
-            The event to be emitted.
-        *data
-            The data to be passed to the callback
-        """
-        self.event.emit(event, *data)
-
-    def timer(self, delay, func, args=()):
-        """The default timer implementation.
-
-        This is normally intended to be replaced should this library
-        need to be used in specific timing cases, such as Qt.
-
-        Parameters
-        ----------
-        delay : int or float
-            How many seconds to wait before calling ``func``.
-        func : function
-            The function to call when <delay> seconds pass.
-        args : tuple, optional
-            The arguments to pass to ``func``.
-        """
-        timer = Timer(delay, func, args)
-        timer.daemon = True
-        timer.start()
-
-    def _checkHttpError(self, response):
-        """Checks for Steam's definition of an error
-        """
-        if response.status_code >= 300 and response.status_code <= 399 and "/login" in response.headers["location"]:
-            self.emit('sessionExpired')
-            return True
-
-        if response.status_code >= 400:
-            # response.raise_for_status()
-            return True
-
-        return False
-
-    def _checkCommunityError(self, body):
-        """Checks for Steam's definition of an error (in the community)
-        """
-        if re.search(r"<h1>Sorry!<\/h1>", body):
-            return True
-
-        if re.search(r"g_steamID = false;", body) and re.search(r"<h1>Sign In<\/h1>", body):
-            self.emit('sessionExpired')
-            return True
-
-        return False
-
     def login(self, **details):
-        '''
-        Initiates login for Steam Web chat.
-        '''
-        rsakey = self.session.post(CommunityURL("login", "getrsakey"), data={
+        """Initiates login for Steam community.
+
+        Parameters
+        ----------
+        **details
+            Can have any of the following values:
+                - username: str
+                - password: str
+                - captcha: str
+                - steamguard: str
+                - twofactor: str
+
+
+        Returns
+        -------
+        ``steamapi.enums.LoginStatus``
+            A value from the LoginStatus enum indicating result.
+
+        Raises
+        ------
+        Exception
+            Raised when steam dologin returns a non-ok error
+        """
+        rsakey = session.post(utils.url_community("login", "getrsakey"), data={
             "username": details["username"]})
 
-        if rsakey.status_code != requests.codes.ok:
+        if not rsakey.ok:
             rsakey.raise_for_status()
-            return None, None
+            return None
 
         rsakey = rsakey.json()
 
@@ -205,94 +131,130 @@ class SteamAPI(object):
             "rsatimestamp": rsakey["timestamp"],
             "twofactorcode": details.get('twofactor', ""),
             "username": details['username'],
-            "oauth_client_id": "DE45CD61",
+            "oauth_client_id": self.oauth_client_id,
             "oauth_scope": "read_profile write_profile read_client write_client",
             "loginfriendlyname": "#login_emailauth_friendlyname_mobile"
         }
 
-        dologin = self.session.post(
-            CommunityURL("login", "dologin"), data=form).json()
+        try:
+            login = session.post(
+                utils.url_community("login", "dologin"), data=form).json()
+        except requests.exceptions.ConnectionError as e:
+            logger.error(e)
+            return enums.LoginStatus.LoginFailed
 
+        if "success" not in login:
+            logger.error("Malformed /login/dologin JSON response")
+            return enums.LoginStatus.LoginFailed
+
+        # cache details so they can be used for `steam.retry`
         self._cache = details
-        if not dologin["success"] and dologin.get("emailauth_needed"):
-            return LoginStatus.SteamGuard
-        elif not dologin["success"] and dologin.get("requires_twofactor"):
-            return LoginStatus.TwoFactor
-        elif not dologin["success"] and dologin.get("captcha_needed"):
+
+        if not login["success"] and login.get("emailauth_needed"):
+            return enums.LoginStatus.SteamGuard
+        elif not login["success"] and login.get("requires_twofactor"):
+            return enums.LoginStatus.TwoFactor
+        elif not login["success"] and login.get("captcha_needed"):
             print("Captcha URL: https://steamcommunity.com/public/captcha.php?gid=" +
-                  dologin["captcha_gid"])
-            self._captchaGid = dologin["captcha_gid"]
-            return LoginStatus.Captcha
-        elif not dologin["success"]:
-            raise Exception(dologin.get("message", "Unknown error"))
+                  login["captcha_gid"])
+            self._captchaGid = login["captcha_gid"]
+            return enums.LoginStatus.Captcha
+        elif not login["success"]:
+            raise Exception(login.get("message", "Unknown error"))
         else:
-            sessionID = generateSessionID()
-            oAuth = json.loads(dologin["oauth"])
-            self.session.cookies.set("sessionid", str(sessionID))
-            self.sessionID = str(sessionID)
+            session_id = utils.generate_session_id()
+            oAuth = json.loads(login["oauth"])
+            session.cookies.set("sessionid", str(session_id))
+            self.session_id = str(session_id)
 
-            self.steamID = SteamID.SteamID(oAuth["steamid"])
-            self.oAuthToken = oAuth["oauth_token"]
+            self.steam_id = SteamID(oAuth["steamid"])
+            self.oauth_token = oAuth["oauth_token"]
+            self._matchine_auth = session.cookies.get(
+                "steamMachineAuth" + str(self.steam_id), '')
 
+            # clear cached details if login succeeds
             self._cache = {}
-            self.steamguard = str(self.steamID) + "||" + \
-                self.session.cookies.get(
-                    "steamMachineAuth" + str(self.steamID), '')
+            self.steamguard = str(self.steam_id) + "||" + self._matchine_auth
 
-            return LoginStatus.LoginSuccessful
+            return enums.LoginStatus.LoginSuccessful
 
-        self._cache = details
-        return LoginStatus.LoginFailed
+        return enums.LoginStatus.LoginFailed
 
     def retry(self, **details):
-        '''
-        Retries a previously failed login attempt.
+        """Retries a previously failed login attempt.
+
         Commonly used to submit a SteamGuard or Mobile Authenticator code.
-        '''
+
+        Parameters
+        ----------
+        **details
+            Description
+        """
         deets = self._cache.copy()
         deets.update(details)
         return self.login(**deets)
 
-    def oAuthLogin(self, steamguard, token):
-        '''
-        Allows password-less login via the following attributes set by SteamAPI.login:
-            Instance.steamguard
-            Instance.oAuthToken
-        '''
+    def oauth_login(self, steamguard, token):
+        """Allows password-less login to steam using OAuth tokens.
+
+        Parameters
+        ----------
+        steamguard : str
+            A previous saved steamguard string.
+            Can be obtained via the `steamguard` property.
+        token : str
+            A previous saved OAuth token.
+            Can be obtained via the `oauth_token` property.
+        """
         steamguard = steamguard.split('||')
-        steamID = SteamID.SteamID(steamguard[0])
+        steam_id = SteamID(steamguard[0])
 
         form = {"access_token": token}
-        login = self.session.post(
-            APIUrl("IMobileAuthService", "GetWGToken"), data=form)
+        login = session.post(
+            utils.url_api("IMobileAuthService", "GetWGToken"), data=form)
 
-        resp = login.json().get('response', {})
-        if not login or 'token' not in resp or 'token_secure' not in resp:
+        if not login:
+            resp = {}
+        else:
+            resp = login.json().get('response', {})
+
+        if 'token' not in resp or 'token_secure' not in resp:
             logger.error("Error logging in with OAuth: Malformed response")
-            return LoginStatus.LoginFailed
+            return enums.LoginStatus.LoginFailed
 
-        sid = str(steamID.SteamID64)
-        self.session.cookies.set('steamLogin', sid + '||' + resp['token'])
-        self.session.cookies.set(
+        sid = str(steam_id.as_64)
+        session.cookies.set('steamLogin', sid + '||' + resp['token'])
+        session.cookies.set(
             'steamLoginSecure', sid + '||' + resp['token_secure'])
         if steamguard[1]:
-            self.session.cookies.set('steamMachineAuth' + sid, steamguard[1])
-        self.session.cookies.set(
-            'sessionid', self.session.cookies.get('sessionid', generateSessionID()))
+            session.cookies.set('steamMachineAuth' + sid, steamguard[1])
+        session.cookies.set('sessionid', utils.get_session_id())
 
-        return LoginStatus.LoginSuccessful
+        return enums.LoginStatus.LoginSuccessful
 
-    def parentalUnlock(self, pin):
-        unlock = self.session.post(
-            CommunityURL('parental', 'ajaxunlock'), data={"pin": pin})
+    def unlock_parental(self, pin):
+        """Unlocks an account locked via parental controls.
+
+        Parameters
+        ----------
+        pin : str
+            The pin used to unlock.
+
+        Returns
+        -------
+        bool
+            True if unlock succeeds, False otherwise.
+        """
+        unlock = session.post(
+            utils.url_community('parental', 'ajaxunlock'), data={"pin": pin})
 
         if not unlock:
             logger.error("Error unlocking parental with pin: Unknown error")
-            return
+            return False
 
         if unlock.status_code != 200:
             logger.error('HTTP error %s', unlock.status_code)
-            return
+            return False
 
         resp = unlock.json()
         if not resp:
@@ -305,12 +267,30 @@ class SteamAPI(object):
 
         return True
 
-    def getNotifications(self):
-        notifications = self.session.get(
-            CommunityURL('actions', 'GetNotificationCounts'))
+    def get_notifications(self):
+        """Gets the count of your current notifications.
+
+        Returns
+        -------
+        dict
+            A dictionary resembling the following structure::
+
+                {
+                    "comments": 0,
+                    "items": 0,
+                    "invites": 0,
+                    "gifts": 0,
+                    "chat": 2,
+                    "trades": 0
+                }
+
+        """
+        notifications = session.get(
+            utils.url_community('actions', 'GetNotificationCounts'))
 
         if not notifications:
             logger.error("Error retrieving notifications")
+            return {}
 
         resp = notifications.json()
 
@@ -330,25 +310,81 @@ class SteamAPI(object):
 
         return notifs
 
-    def resetItemNotifications(self):
-        self.session.get(CommunityURL('my', 'inventory'))
-        return True
+    def reset_item_notifications(self):
+        """Resets the item notification count.
+
+        Returns
+        -------
+        bool
+            True if request succeeded, False otherwise.
+        """
+        res = session.get(utils.url_community('my', 'inventory'))
+        if res:
+            return True
+
+        return False
+
+    def add_friend(self, steam_id):
+        """Adds a given user to the friends list via their steam ID.
+
+        Parameters
+        ----------
+        steam_id : `steamapi.SteamID`` or str
+            The Steam ID of which to add to the friends list.
+            If not already an instance of `steamapi.SteamID``, it will be converted into one.
+
+        Returns
+        -------
+        int
+            If adding the user was successful, returns 1.
+            Other returns are unknown.
+            If JSON decoding fails, returns 0.
+        """
+        if not isinstance(steam_id, SteamID):
+            steam_id = SteamID(steam_id)
+
+        form = {
+            "accept_invite": 0,
+            "sessionID": utils.get_session_id(),
+            "steamid": str(steam_id.as_64)
+        }
+        response = session.post(utils.url_community(
+            'actions', 'AddFriendAjax'), data=form)
+
+        if not response.ok:
+            logger.error("Error in adding friend: %s", response.status_code)
+            return None
+
+        try:
+            body = response.json()
+            return body["success"]
+        except:
+            return 0
 
     @property
-    def loggedIn(self):
-        resp = self.session.get(CommunityURL('my', ''), allow_redirects=False)
+    def logged_in(self):
+        """Checks whether instance is logged into the Steam community.
+
+        Returns
+        -------
+        ``steamapi.enums.LoggedIn``
+            A value from the LoggedIn enum indicating status.
+        """
+        resp = session.get(utils.url_community(
+            'my', ''), allow_redirects=False)
 
         if resp.status_code != 302 and resp.status_code != 403:
             logger.error('HTTP error %s', resp.status_code)
-            return LoggedIn.GeneralError
+            return enums.LoggedIn.GeneralError
 
         if resp.status_code == 403:
-            return LoggedIn.FamilyView
+            # needs a PIN to unlock
+            return enums.LoggedIn.FamilyView
 
         id_match = re.compile(
             r'steamcommunity\.com(\/(id|profiles)\/[^\/]+)\/?')
 
         if id_match.search(resp.headers['location']):
-            return LoggedIn.LoggedIn
+            return enums.LoggedIn.LoggedIn
 
-        return LoggedIn.GeneralError
+        return enums.LoggedIn.GeneralError

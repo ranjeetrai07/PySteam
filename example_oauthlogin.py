@@ -2,8 +2,8 @@ from sys import argv
 import IPython
 from builtins import input
 
-import steamapi as SteamAPI
-steam = SteamAPI.SteamAPI()
+import steamapi
+steam = steamapi.steamapi()
 
 try:
     username = argv[1]
@@ -13,27 +13,27 @@ except IndexError:
     password = input("password: ")
 
 status = steam.login(username=username, password=password)
-while status != SteamAPI.LoginStatus.LoginSuccessful:
-    if status == SteamAPI.LoginStatus.TwoFactor:
+while status != steamapi.enums.LoginStatus.LoginSuccessful:
+    if status == steamapi.enums.LoginStatus.TwoFactor:
         token = input("Two-factor Token: ")
         status = steam.retry(twofactor=token)
-    elif status == SteamAPI.LoginStatus.SteamGuard:
+    elif status == steamapi.enums.LoginStatus.SteamGuard:
         steamguard = input("SteamGuard Code: ")
         status = steam.retry(steamguard=steamguard)
-    elif status == SteamAPI.LoginStatus.Captcha:
+    elif status == steamapi.enums.LoginStatus.Captcha:
         captcha = input("CAPTCHA: ")
         status = steam.retry(captcha=captcha)
 
 print("steamguard:", steam.steamguard)
-print("oAuthToken:", steam.oAuthToken)
+print("oAuthToken:", steam.oauth_token)
 
 steamguard = steam.steamguard
-oauthtoken = steam.oAuthToken
+oauthtoken = steam.oauth_token
 
 # logoff
 steam.session.cookies.clear()
-steam = SteamAPI.SteamAPI()
+steam = steamapi.steamapi()
 # use tokens to login.
-print(steam.oAuthLogin(steamguard, oauthtoken))
+print(steam.oauth_login(steamguard, oauthtoken))
 
 IPython.embed()

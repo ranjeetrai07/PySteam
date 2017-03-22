@@ -65,6 +65,18 @@ class SteamID(object):
     TypeChars[Type.ANON_USER] = 'a'
 
     def __init__(self, inp=None):
+        """Represents a Steam ID.
+
+        Parameters
+        ----------
+        inp : int or str, optional
+            Initial input to base Steam ID from.
+
+        Raises
+        ------
+        Exception
+            Raised if not a valid steam format.
+        """
         self.universe = Universe.INVALID
         self.type = Type.INVALID
         self.instance = Instance.ALL
@@ -115,15 +127,35 @@ class SteamID(object):
             self.universe = Universe(inp >> 56)
 
     @staticmethod
-    def fromIndividualAccountID(accountid):
+    def from_account_id(accountid):
+        """Creates a ``steamapi.SteamID`` instance from an account ID (aka Steam32 ID).
+
+        Parameters
+        ----------
+        accountid : int or str
+            The account ID to create a ``steamapi.SteamID`` instance from.
+
+        Returns
+        -------
+        ``steamapi.SteamID``
+            Instance of ``steamapi.SteamID`` with `accountid`.
+        """
         sid = SteamID()
         sid.universe = SteamID.Universe.PUBLIC
         sid.type = SteamID.Type.INDIVIDUAL
         sid.instance = SteamID.Instance.DESKTOP
-        sid.accountid = int(accountid) if isinstance(accountid, int) or accountid.isdigit() else 0
+        sid.accountid = int(accountid) if isinstance(
+            accountid, int) or accountid.isdigit() else 0
         return sid
 
-    def isValid(self):
+    def is_valid(self):
+        """Checks if current steam ID is valid.
+
+        Returns
+        -------
+        bool
+            True if valid, otherwise False.
+        """
         if self.type <= Type.INVALID or self.type > Type.ANON_USER:
             return False
 
@@ -141,7 +173,25 @@ class SteamID(object):
 
         return True
 
-    def Steam2RenderedID(self, newerFormat=None):
+    def _as_steam2(self, newerFormat=True):
+        """Outputs steam ID in Steam ID2 format (e.g ``STEAM_1:0:1234``)
+
+        Parameters
+        ----------
+        newerFormat : bool, optional
+            Whether to use the new public universe for IDs.
+            Refer to note.
+
+        Returns
+        -------
+        str
+            Steam ID in Steam ID2 format (e.g ``STEAM_1:0:1234``)
+
+        Raises
+        ------
+        Exception
+            Raised if trying to render a non-individual ID as Steam ID2.
+        """
         if self.type != Type.INDIVIDUAL:
             raise Exception(
                 "Can't get Steam2 rendered ID for non-individual ID")
@@ -152,7 +202,45 @@ class SteamID(object):
 
             return "STEAM_{x}:{y}:{z}".format(x=universe, y=(self.accountid & 1), z=int(math.floor(self.accountid / 2)))
 
-    def Steam3RenderedID(self):
+    @property
+    def as_steam2(self):
+        """Outputs steam ID in Steam ID2 format (e.g ``STEAM_1:0:1234``)
+
+        Note
+        ____
+        ``STEAM_X:Y:Z``. The value of ``X`` should represent the universe, or ``1``
+        for ``Public``. However, there was a bug in GoldSrc and Orange Box games
+        and ``X`` was ``0``. If you need that format use :attr:`SteamID.as_steam2_zero`
+
+        Returns
+        -------
+        str
+            Steam ID in Steam ID2 format (e.g ``STEAM_1:0:1234``)
+        """
+        return self._as_steam2()
+
+    @property
+    def as_steam2_zero(self):
+        """For GoldSrc and Orange Box games.
+
+        See :attr:`SteamID.as_steam2`
+
+        Returns
+        -------
+        str
+            Steam ID in Steam ID2 format (e.g ``STEAM_1:0:1234``)
+        """
+        return self._as_steam2(newerFormat=False)
+
+    @property
+    def as_steam3(self):
+        """Outputs steam ID in Steam ID3 format (e.g ``[U:1:1234]``)
+
+        Returns
+        -------
+        str
+            Steam ID in Steam ID3 format (e.g ``[U:1:1234]``)
+        """
         typeChar = self.TypeChars.get(self.type, 'i')
 
         if self.instance & ChatInstanceFlags.CLAN:
@@ -170,28 +258,40 @@ class SteamID(object):
             instance=(':' + str(self.instance) if renderInstance else ''))
 
     @property
-    def SteamID64(self):
+    def as_32(self):
+        return (self.as_64 - 76561197960265728)
+
+    @property
+    def as_64(self):
         return ((self.universe << 56) | (self.type << 52) | (self.instance << 32) | self.accountid)
 
     @property
-    def SteamID32(self):
-        return (self.SteamID64 - 76561197960265728)
+    def steam_id(self):
+        return self._as_steam2()
 
     @property
-    def SteamID(self):
-        return self.Steam2RenderedID()
-
-    @property
-    def SteamID3(self):
-        return self.Steam3RenderedID()
+    def steam_id3(self):
+        return self.as_steam3
 
     def __str__(self):
-        return str(self.SteamID64)
+        return str(self.as_64)
 
     def __repr__(self):
-        return "SteamID.SteamID('{}')".format(self.SteamID64)
+        return "SteamID.SteamID('{}')".format(self.as_64)
 
     def _getTypeFromChar(self, typeChar):
+        """Gets type based on character
+
+        Parameters
+        ----------
+        typeChar : str
+            Character to get relevant type from.
+
+        Returns
+        -------
+        ``SteamID.Type``
+            Type derived from `typeChar`.
+        """
         for type_ in self.TypeChars:
             if self.TypeChars[type_] == typeChar:
                 return int(type_)
